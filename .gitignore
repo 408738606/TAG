@@ -1,0 +1,44 @@
+# IDE and editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+
+# Dataset and model files (ignore large binary files)
+dataset/
+datasets/
+*.zip
+*.tar
+*.gz
+*.7z
+*.pth
+*.ckpt
+*.h5
+*.npy
+*.npz
+*.bin
+*.pt
+
+# Keep empty dataset folders structure (optional)
+# If you need to keep an empty folder, put a .gitkeep inside it and use:
+!dataset/.gitkeep
+!datasets/.gitkeep
+
+# InternVideo (if it's a submodule or specific)
+InternVideo/
+# If you need to keep some files inside, add exceptions like:
+# !InternVideo/.gitkeep
+
+# Others
+*.log
+*.tmp
+.DS_Store
