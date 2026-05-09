@@ -88,6 +88,17 @@ python evaluate.py --dataset activitynet --llm_output dataset/activitynet/llm_ou
 |  Charades-STA  |  67.82  |  48.58  |  26.67  |  45.69  |
 |  ActivityNet   |  51.88  |  28.91  |  15.07  |  36.55  |
 
+### Frequency-Domain Extensions (Optional)
+
+You can enable the frequency-domain enhancements described in the report via CLI overrides:
+
+- **FFT similarity smoothing**: `--fft_smoothing --fft_cutoff 0.25`
+- **Frequency regularization**: `--freq_regularization --freq_reg_strength 0.5`
+- **Wavelet multi-scale pooling**: `--wavelet_levels 1`
+- **Frequency attention**: `--freq_attention --freq_attention_mode channel --freq_attention_strength 1.0`
+- **Octave temporal convolution**: `--octave_conv --octave_alpha 0.5 --octave_kernel_size 3`
+- **Mask threshold override**: `--score_threshold 0.2`
+
 
 ### OOD Splits
 

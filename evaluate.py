@@ -15,8 +15,49 @@ def get_args():
     parser.add_argument('--use_llm', action='store_true', help='Enable use llm')
     parser.add_argument('--tckmeans', action='store_true', help='Enable use GPU KMeans')
     parser.add_argument('--llm_output', default=None, type=str, help='LLM prompt output. If not specified, use nonly VLM for evaluation.')
+    parser.add_argument('--fft_smoothing', action='store_true', help='Enable FFT low-pass smoothing on similarity scores.')
+    parser.add_argument('--fft_cutoff', default=None, type=float, help='Low-pass cutoff ratio (0-1) for FFT smoothing.')
+    parser.add_argument('--freq_regularization', action='store_true', help='Enable frequency-domain regularization on similarity scores.')
+    parser.add_argument('--freq_reg_strength', default=None, type=float, help='Regularization strength for frequency attenuation.')
+    parser.add_argument('--wavelet_levels', default=None, type=int, help='Number of Haar wavelet levels for multiscale pooling.')
+    parser.add_argument('--freq_attention', action='store_true', help='Enable frequency attention for temporal features.')
+    parser.add_argument('--freq_attention_strength', default=None, type=float, help='Strength for frequency attention gating.')
+    parser.add_argument('--freq_attention_mode', default=None, choices=['channel', 'frequency', 'both'], help='Frequency attention mode.')
+    parser.add_argument('--octave_conv', action='store_true', help='Enable octave-style temporal convolution.')
+    parser.add_argument('--octave_alpha', default=None, type=float, help='Low-frequency channel ratio for octave convolution.')
+    parser.add_argument('--octave_kernel_size', default=None, type=int, help='Kernel size for octave convolution smoothing.')
+    parser.add_argument('--score_threshold', default=None, type=float, help='Similarity score threshold for masking.')
 
     return parser.parse_args()
+
+
+def apply_hyperparam_overrides(hyperparams, args):
+    hyperparams = hyperparams.copy()
+    if args.score_threshold is not None:
+        hyperparams['score_threshold'] = args.score_threshold
+    if args.fft_smoothing:
+        hyperparams['fft_smoothing'] = True
+    if args.fft_cutoff is not None:
+        hyperparams['fft_cutoff'] = args.fft_cutoff
+    if args.freq_regularization:
+        hyperparams['frequency_regularization'] = True
+    if args.freq_reg_strength is not None:
+        hyperparams['frequency_reg_strength'] = args.freq_reg_strength
+    if args.wavelet_levels is not None:
+        hyperparams['wavelet_levels'] = args.wavelet_levels
+    if args.freq_attention:
+        hyperparams['freq_attention'] = True
+    if args.freq_attention_strength is not None:
+        hyperparams['freq_attention_strength'] = args.freq_attention_strength
+    if args.freq_attention_mode is not None:
+        hyperparams['freq_attention_mode'] = args.freq_attention_mode
+    if args.octave_conv:
+        hyperparams['octave_conv'] = True
+    if args.octave_alpha is not None:
+        hyperparams['octave_alpha'] = args.octave_alpha
+    if args.octave_kernel_size is not None:
+        hyperparams['octave_kernel_size'] = args.octave_kernel_size
+    return hyperparams
 
 
 def calc_iou(candidates, gt):
@@ -138,16 +179,17 @@ if __name__=='__main__':
     assert args.split in dataset['splits'], 'Unsupported split. To evaluate other split, please add the configuration in data_configs.py.'
     
     print('Evaluating', args.dataset, args.split)
+    hyperparams = apply_hyperparam_overrides(dataset['hyper_parameters'], args)
 
 
     if args.llm_output and os.path.exists(args.llm_output):
         with open(args.llm_output) as f:
             data = json.load(f)
         if args.use_llm:
-            eval_with_llm(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.tckmeans)
+            eval_with_llm(data, dataset['feature_path'], dataset['stride'], hyperparams, args.tckmeans)
         else:
-            eval_without_llm(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.tckmeans)
+            eval_without_llm(data, dataset['feature_path'], dataset['stride'], hyperparams, args.tckmeans)
     else:
         with open(dataset['splits'][args.split]['annotation_file']) as f:
             data = json.load(f)
-        eval(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.use_llm, args.tckmeans, dataset['splits'][args.split]['pad_sec'])
+        eval(data, dataset['feature_path'], dataset['stride'], hyperparams, args.use_llm, args.tckmeans, dataset['splits'][args.split]['pad_sec'])

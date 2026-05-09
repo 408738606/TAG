@@ -14,6 +14,28 @@ vis_processors = transforms.Compose([
 ])
 #### BLIP-2 Q-Former ####
 
+DEFAULT_HYPERPARAMS = {
+    "score_threshold": 0.2,
+    "fft_smoothing": False,
+    "fft_cutoff": 0.25,
+    "frequency_regularization": False,
+    "frequency_reg_strength": 0.0,
+    "wavelet_levels": 0,
+    "freq_attention": False,
+    "freq_attention_strength": 1.0,
+    "freq_attention_mode": "channel",
+    "octave_conv": False,
+    "octave_alpha": 0.5,
+    "octave_kernel_size": 3,
+}
+
+
+def merge_hyperparams(hyperparams):
+    merged = DEFAULT_HYPERPARAMS.copy()
+    if hyperparams is not None:
+        merged.update(hyperparams)
+    return merged
+
 
 def gaussian_kernel(size, sigma=1):
     size = int(size) // 2
@@ -68,6 +90,144 @@ def get_dynamic_scores(scores, stride, masks, ths=0.0005, sigma=1):
     dynamic_scores = torch.from_numpy(dynamic_scores).to('cuda')
     return dynamic_idxs, dynamic_scores
 
+
+def fft_lowpass_filter(scores, cutoff_ratio):
+    if cutoff_ratio is None or cutoff_ratio >= 1:
+        return scores
+    cutoff_ratio = max(cutoff_ratio, 0.0)
+    freq = torch.fft.rfft(scores, dim=-1)
+    cutoff_idx = max(1, int(cutoff_ratio * freq.size(-1)))
+    mask = torch.zeros_like(freq)
+    mask[..., :cutoff_idx] = 1
+    filtered = freq * mask
+    return torch.fft.irfft(filtered, n=scores.size(-1), dim=-1)
+
+
+def fft_soft_attenuation(scores, reg_strength):
+    if reg_strength is None or reg_strength <= 0:
+        return scores
+    freq = torch.fft.rfft(scores, dim=-1)
+    freq_bins = torch.linspace(0, 1, freq.size(-1), device=scores.device, dtype=scores.dtype)
+    weights = 1 / (1 + reg_strength * (freq_bins**2))
+    weights = weights.to(freq.dtype)
+    return torch.fft.irfft(freq * weights, n=scores.size(-1), dim=-1)
+
+
+def apply_similarity_frequency_processing(scores, hyperparams):
+    if not hyperparams["fft_smoothing"] and not (
+        hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0
+    ):
+        return scores
+    scores = scores.float()
+    if hyperparams["fft_smoothing"]:
+        scores = fft_lowpass_filter(scores, hyperparams["fft_cutoff"])
+    if hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0:
+        scores = fft_soft_attenuation(scores, hyperparams["frequency_reg_strength"])
+    return scores
+
+
+def apply_frequency_attention(features, strength=1.0, mode="channel"):
+    if strength is None or strength <= 0:
+        return features
+    freq = torch.fft.rfft(features, dim=0)
+    power = torch.abs(freq)
+    eps = 1e-6
+
+    if mode in ("channel", "both"):
+        channel_energy = power.mean(dim=0)
+        channel_norm = (channel_energy - channel_energy.mean()) / (channel_energy.std() + eps)
+        channel_weights = torch.sigmoid(channel_norm * strength).to(freq.dtype)
+        freq = freq * channel_weights
+
+    if mode in ("frequency", "both"):
+        freq_energy = power.mean(dim=1, keepdim=True)
+        freq_norm = (freq_energy - freq_energy.mean()) / (freq_energy.std() + eps)
+        freq_weights = torch.sigmoid(freq_norm * strength).to(freq.dtype)
+        freq = freq * freq_weights
+
+    return torch.fft.irfft(freq, n=features.size(0), dim=0)
+
+
+def depthwise_avg_conv1d(features, kernel_size):
+    if kernel_size <= 1 or features.size(0) < 2:
+        return features
+    padding = kernel_size // 2
+    x = features.transpose(0, 1).unsqueeze(0)
+    kernel = torch.ones((features.size(1), 1, kernel_size), device=features.device, dtype=features.dtype)
+    kernel = kernel / kernel_size
+    out = F.conv1d(x, kernel, padding=padding, groups=features.size(1))
+    return out.squeeze(0).transpose(0, 1)
+
+
+def avg_pool_time(features, stride=2):
+    if features.size(0) < 2:
+        return features
+    x = features.transpose(0, 1).unsqueeze(0)
+    out = F.avg_pool1d(x, kernel_size=stride, stride=stride, ceil_mode=True)
+    return out.squeeze(0).transpose(0, 1)
+
+
+def repeat_upsample(features, target_len):
+    if features.size(0) == target_len:
+        return features
+    repeat = int(np.ceil(target_len / features.size(0)))
+    return features.repeat_interleave(repeat, dim=0)[:target_len]
+
+
+def octave_temporal_conv(features, alpha=0.5, kernel_size=3):
+    if alpha <= 0 or alpha >= 1 or features.size(0) < 2:
+        return features
+    total_channels = features.size(1)
+    low_channels = max(1, int(total_channels * alpha))
+    high_channels = total_channels - low_channels
+    if low_channels == 0 or high_channels == 0:
+        return features
+
+    high = features[:, :high_channels]
+    low = features[:, high_channels:]
+
+    low_ds = avg_pool_time(low, stride=2)
+    high_ds = avg_pool_time(high, stride=2)
+
+    high_conv = depthwise_avg_conv1d(high, kernel_size)
+    low_conv = depthwise_avg_conv1d(low_ds, kernel_size)
+
+    high_to_low = depthwise_avg_conv1d(high_ds, kernel_size)
+    low_to_high = repeat_upsample(low_conv, high_conv.size(0))
+
+    high_out = high_conv + low_to_high
+    low_out = low_conv + high_to_low
+
+    low_out_up = repeat_upsample(low_out, high_out.size(0))
+    return torch.cat([high_out, low_out_up], dim=1)
+
+
+def haar_dwt(features):
+    if features.size(0) < 2:
+        return features, torch.zeros_like(features)
+    if features.size(0) % 2 != 0:
+        features = torch.cat([features, features[-1:].clone()], dim=0)
+    even = features[0::2]
+    odd = features[1::2]
+    low = (even + odd) / 2
+    high = (even - odd) / 2
+    return low, high
+
+
+def apply_wavelet_multiscale(features, levels):
+    if levels is None or levels <= 0 or features.size(0) < 2:
+        return features
+    components = [features]
+    current = features
+    target_len = features.size(0)
+    for _ in range(levels):
+        low, high = haar_dwt(current)
+        components.append(repeat_upsample(low, target_len))
+        components.append(repeat_upsample(high, target_len))
+        current = low
+        if current.size(0) < 2:
+            break
+    return torch.cat(components, dim=1)
 
 
 def extract_static_score(start, end, cum_scores, num_frames, scores):
@@ -160,11 +320,13 @@ def alignment_adjustment(data, scale_gamma, device, lambda_max=2, lambda_min=-2)
 
 
 def temporal_aware_feature_smoothing(kernel_size, features):
+    if kernel_size <= 1 or features.size(0) < 2:
+        return features
     padding_size = kernel_size // 2
     padded_features = torch.cat((features[0].repeat(padding_size, 1), features, features[-1].repeat(padding_size, 1)), dim=0)
-    kernel = torch.ones(padded_features.shape[1], 1, kernel_size).cuda() / kernel_size
-    padded_features = padded_features.unsqueeze(0).permute(0, 2, 1)  # (1, 257, 104)
     padded_features = padded_features.float()
+    kernel = torch.ones(padded_features.shape[1], 1, kernel_size, device=features.device, dtype=padded_features.dtype) / kernel_size
+    padded_features = padded_features.unsqueeze(0).permute(0, 2, 1)  # (1, 257, 104)
 
     temporal_aware_features = F.conv1d(padded_features, kernel, padding=0, groups=padded_features.shape[1])
     temporal_aware_features = temporal_aware_features.permute(0, 2, 1)
@@ -336,6 +498,7 @@ def get_proposals_with_scores(scene_segments, cum_scores, frame_scores, num_fram
 
 
 def generate_proposal_revise(video_features, sentences, stride, hyperparams, tckmeans):
+    hyperparams = merge_hyperparams(hyperparams)
     num_frames = video_features.shape[0]
 
     with torch.no_grad():
@@ -348,9 +511,11 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     scores = torch.einsum('md,npd->mnp', v1, v2)
     scores, scores_idx = scores.max(dim=-1)
     scores = scores.mean(dim=0, keepdim=True)
+
+    scores = apply_similarity_frequency_processing(scores, hyperparams)
     
     # scores > 0.2인 마스킹 생성 (Boolean 형태 유지)
-    initial_masks = scores > 0.2
+    initial_masks = scores > hyperparams["score_threshold"]
     masks, masked_indices = scores_masking(scores, initial_masks)
 
     # Alignment adjustment of similarity scores
@@ -370,6 +535,21 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     # Temporal-aware vector smoothing
     temporal_aware_features = temporal_aware_feature_smoothing(hyperparams['temporal_window_size'], selected_video_time_features)
     ### TAP ###
+
+    if hyperparams["freq_attention"]:
+        temporal_aware_features = apply_frequency_attention(
+            temporal_aware_features,
+            strength=hyperparams["freq_attention_strength"],
+            mode=hyperparams["freq_attention_mode"],
+        )
+    if hyperparams["octave_conv"]:
+        temporal_aware_features = octave_temporal_conv(
+            temporal_aware_features,
+            alpha=hyperparams["octave_alpha"],
+            kernel_size=hyperparams["octave_kernel_size"],
+        )
+    if hyperparams["wavelet_levels"] > 0:
+        temporal_aware_features = apply_wavelet_multiscale(temporal_aware_features, hyperparams["wavelet_levels"])
 
 
     # Kmeans Clustering
