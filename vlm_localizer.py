@@ -56,7 +56,7 @@ def compute_frequency_weights(scores, band_ratios=(0.2, 0.6)):
     return weights / (weights.sum() + 1e-6)
 
 
-def multi_scale_temporal_smoothing(features, base_kernel_size, scores, window_sizes=None, band_ratios=(0.2, 0.6)):
+def multi_scale_temporal_smoothing(features, base_kernel_size, frequency_scores, window_sizes=None, band_ratios=(0.2, 0.6)):
     num_frames = features.size(0)
     if window_sizes:
         kernel_sizes = [adjust_kernel_size(k, num_frames) for k in window_sizes]
@@ -79,19 +79,20 @@ def multi_scale_temporal_smoothing(features, base_kernel_size, scores, window_si
     mid = kernel_sizes[len(kernel_sizes) // 2]
     large = kernel_sizes[-1]
 
-    weights = compute_frequency_weights(scores, band_ratios)
+    weights = compute_frequency_weights(frequency_scores, band_ratios)
     smooth_large = temporal_aware_feature_smoothing(large, features)
     smooth_mid = temporal_aware_feature_smoothing(mid, features)
     smooth_small = temporal_aware_feature_smoothing(small, features)
 
-    return weights[0] * smooth_large + weights[1] * smooth_mid + weights[2] * smooth_small
+    low_weight, mid_weight, high_weight = weights
+    return low_weight * smooth_large + mid_weight * smooth_mid + high_weight * smooth_small
 
 
 def build_length_bias(query_text, weight):
     if weight <= 0 or not query_text:
         return None
 
-    tokens = re.findall(r"\w+", query_text.lower())
+    tokens = re.findall(r"[a-zA-Z]+", query_text.lower())
     if not tokens:
         return None
 
@@ -458,8 +459,8 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     normalized_scores, is_scale = alignment_adjustment(data, hyperparams['gamma'], scores.device, lambda_max=2, lambda_min=-2)
 
     masked_scores = scores * initial_masks.float()
-    dynamic_stride = min(stride, masked_scores.size(-1) // 2)
-    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, dynamic_stride, initial_masks.float())
+    dynamic_score_stride = min(stride, masked_scores.size(-1) // 2)
+    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, dynamic_score_stride, initial_masks.float())
     dynamic_frames = torch.round(dynamic_idxs * num_frames).int()
     
     video_features = torch.tensor(video_features).cuda()

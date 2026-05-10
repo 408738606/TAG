@@ -65,7 +65,7 @@ _STOPWORDS = {
 _SYNONYM_MAP = {
     "sofa": ["couch"],
     "tv": ["television"],
-    "cellphone": ["phone", "mobile phone"],
+    "cellphone": ["phone", "mobile"],
     "kitchen": ["cooking area"],
     "cup": ["mug"],
     "fridge": ["refrigerator"],
@@ -81,7 +81,7 @@ def _normalize_query(text):
     if not text:
         return text
     text = text.replace("\n", " ").replace("\t", " ")
-    text = re.sub(r"[^\w\s]", " ", text.lower())
+    text = re.sub(r"[^a-z0-9\s]", " ", text.lower())
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
