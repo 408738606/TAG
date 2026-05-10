@@ -20,6 +20,11 @@ DEFAULT_HYPERPARAMS = {
     "fft_cutoff": 0.25,
     "frequency_regularization": False,
     "frequency_reg_strength": 0.0,
+    "fft_adaptive": False,
+    "fft_energy_ratio": 0.9,
+    "fft_band_mix": False,
+    "fft_low_weight": 0.7,
+    "fft_high_weight": 0.3,
     "wavelet_levels": 0,
     "freq_attention": False,
     "freq_attention_strength": 1.0,
@@ -91,12 +96,26 @@ def get_dynamic_scores(scores, stride, masks, ths=0.0005, sigma=1):
     return dynamic_idxs, dynamic_scores
 
 
-def fft_lowpass_filter(scores, cutoff_ratio):
-    if cutoff_ratio is None or cutoff_ratio >= 1:
+def get_fft_cutoff_index(freq, cutoff_ratio, energy_ratio=None):
+    if energy_ratio is not None:
+        energy_ratio = float(min(max(energy_ratio, 0.0), 1.0))
+        power = torch.abs(freq) ** 2
+        energy = power.mean(dim=0)
+        cumulative = torch.cumsum(energy, dim=0)
+        target = cumulative[-1] * energy_ratio
+        cutoff_idx = int(torch.searchsorted(cumulative, target).item()) + 1
+    else:
+        cutoff_ratio = 1.0 if cutoff_ratio is None else cutoff_ratio
+        cutoff_ratio = min(max(cutoff_ratio, 0.0), 1.0)
+        cutoff_idx = max(1, int(cutoff_ratio * freq.size(-1)))
+    return min(cutoff_idx, freq.size(-1))
+
+
+def fft_lowpass_filter(scores, cutoff_ratio, energy_ratio=None):
+    if (cutoff_ratio is None or cutoff_ratio >= 1) and energy_ratio is None:
         return scores
-    cutoff_ratio = max(cutoff_ratio, 0.0)
     freq = torch.fft.rfft(scores, dim=-1)
-    cutoff_idx = max(1, int(cutoff_ratio * freq.size(-1)))
+    cutoff_idx = get_fft_cutoff_index(freq, cutoff_ratio, energy_ratio)
     mask = torch.zeros_like(freq)
     mask[..., :cutoff_idx] = 1
     filtered = freq * mask
@@ -116,11 +135,28 @@ def fft_soft_attenuation(scores, reg_strength):
 def apply_similarity_frequency_processing(scores, hyperparams):
     if not hyperparams["fft_smoothing"] and not (
         hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0
-    ):
+    ) and not hyperparams["fft_band_mix"]:
         return scores
     scores = scores.float()
-    if hyperparams["fft_smoothing"]:
-        scores = fft_lowpass_filter(scores, hyperparams["fft_cutoff"])
+    original_scores = scores
+    low = None
+    energy_ratio = hyperparams["fft_energy_ratio"] if hyperparams["fft_adaptive"] else None
+
+    if hyperparams["fft_smoothing"] or hyperparams["fft_band_mix"]:
+        low = fft_lowpass_filter(original_scores, hyperparams["fft_cutoff"], energy_ratio)
+        if hyperparams["fft_smoothing"]:
+            scores = low
+
+    if hyperparams["fft_band_mix"]:
+        high = original_scores - low
+        low_weight = max(hyperparams["fft_low_weight"], 0.0)
+        high_weight = max(hyperparams["fft_high_weight"], 0.0)
+        weight_sum = low_weight + high_weight
+        if weight_sum == 0:
+            scores = original_scores
+        else:
+            scores = (low_weight * low + high_weight * high) / weight_sum
+
     if hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0:
         scores = fft_soft_attenuation(scores, hyperparams["frequency_reg_strength"])
     return scores

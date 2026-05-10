@@ -93,11 +93,25 @@ python evaluate.py --dataset activitynet --llm_output dataset/activitynet/llm_ou
 You can enable the frequency-domain enhancements described in the report via CLI overrides:
 
 - **FFT similarity smoothing**: `--fft_smoothing --fft_cutoff 0.25`
+- **Adaptive FFT cutoff**: `--fft_adaptive --fft_energy_ratio 0.9`
+- **FFT band mixing (low/high fusion)**: `--fft_band_mix --fft_low_weight 0.7 --fft_high_weight 0.3`
 - **Frequency regularization**: `--freq_regularization --freq_reg_strength 0.5`
 - **Wavelet multi-scale pooling**: `--wavelet_levels 1`
 - **Frequency attention**: `--freq_attention --freq_attention_mode channel --freq_attention_strength 1.0`
 - **Octave temporal convolution**: `--octave_conv --octave_alpha 0.5 --octave_kernel_size 3`
 - **Mask threshold override**: `--score_threshold 0.2`
+
+### Implemented Improvements Summary
+
+The following frequency-domain improvements are implemented in this repo for further tuning:
+
+1. **FFT similarity smoothing** to reduce high-frequency noise in frame-text similarity.
+2. **Adaptive FFT cutoff** using an energy ratio to retain dominant spectral components automatically.
+3. **FFT band mixing** to blend low-frequency trend with high-frequency boundaries.
+4. **Frequency-domain regularization** via soft attenuation of higher frequencies.
+5. **Wavelet multiscale pooling** to capture coarse trends and fine detail jointly.
+6. **Frequency attention** to reweight informative spectral channels or bands.
+7. **Octave-style temporal convolution** to model low/high temporal frequencies efficiently.
 
 
 ### OOD Splits

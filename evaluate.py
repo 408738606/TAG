@@ -17,6 +17,11 @@ def get_args():
     parser.add_argument('--llm_output', default=None, type=str, help='LLM prompt output. If not specified, use nonly VLM for evaluation.')
     parser.add_argument('--fft_smoothing', action='store_true', help='Enable FFT low-pass smoothing on similarity scores.')
     parser.add_argument('--fft_cutoff', default=None, type=float, help='Low-pass cutoff ratio (0-1) for FFT smoothing.')
+    parser.add_argument('--fft_adaptive', action='store_true', help='Enable adaptive FFT cutoff based on energy ratio.')
+    parser.add_argument('--fft_energy_ratio', default=None, type=float, help='Energy ratio for adaptive FFT cutoff (0-1).')
+    parser.add_argument('--fft_band_mix', action='store_true', help='Enable low/high-frequency band mixing.')
+    parser.add_argument('--fft_low_weight', default=None, type=float, help='Weight for low-frequency band mix.')
+    parser.add_argument('--fft_high_weight', default=None, type=float, help='Weight for high-frequency band mix.')
     parser.add_argument('--freq_regularization', action='store_true', help='Enable frequency-domain regularization on similarity scores.')
     parser.add_argument('--freq_reg_strength', default=None, type=float, help='Regularization strength for frequency attenuation.')
     parser.add_argument('--wavelet_levels', default=None, type=int, help='Number of Haar wavelet levels for multiscale pooling.')
@@ -39,6 +44,16 @@ def apply_hyperparam_overrides(hyperparams, args):
         hyperparams['fft_smoothing'] = True
     if args.fft_cutoff is not None:
         hyperparams['fft_cutoff'] = args.fft_cutoff
+    if args.fft_adaptive:
+        hyperparams['fft_adaptive'] = True
+    if args.fft_energy_ratio is not None:
+        hyperparams['fft_energy_ratio'] = args.fft_energy_ratio
+    if args.fft_band_mix:
+        hyperparams['fft_band_mix'] = True
+    if args.fft_low_weight is not None:
+        hyperparams['fft_low_weight'] = args.fft_low_weight
+    if args.fft_high_weight is not None:
+        hyperparams['fft_high_weight'] = args.fft_high_weight
     if args.freq_regularization:
         hyperparams['frequency_regularization'] = True
     if args.freq_reg_strength is not None:
