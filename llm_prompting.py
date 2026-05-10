@@ -58,8 +58,8 @@ def filter_and_integrate(sub_query_proposals, relation):
 _STOPWORDS = {
     "a", "an", "the", "and", "or", "to", "of", "in", "on", "at", "with",
     "for", "from", "by", "is", "are", "was", "were", "be", "been", "being",
-    "then", "after", "before", "while", "during", "into", "onto", "over",
-    "under", "up", "down", "off", "out", "about", "near", "around", "as",
+    "into", "onto", "over", "under", "up", "down", "off", "out", "about",
+    "near", "around", "as",
 }
 
 _SYNONYM_MAP = {
@@ -81,7 +81,8 @@ def _normalize_query(text):
     if not text:
         return text
     text = text.replace("\n", " ").replace("\t", " ")
-    text = re.sub(r"[^a-z0-9\s]", " ", text.lower())
+    text = text.lower().replace("_", " ")
+    text = re.sub(r"[^\w\s]", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 

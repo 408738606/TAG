@@ -92,12 +92,15 @@ def build_length_bias(query_text, weight):
     if weight <= 0 or not query_text:
         return None
 
-    tokens = re.findall(r"[a-zA-Z]+", query_text.lower())
+    tokens = [token for token in re.findall(r"\w+", query_text.lower()) if not token.isdigit()]
     if not tokens:
         return None
 
     query_len = len(tokens)
-    target_ratio = min(0.6, max(0.08, 0.04 * query_len))
+    min_ratio = 0.08
+    max_ratio = 0.6
+    scale_ratio = 0.04
+    target_ratio = min(max_ratio, max(min_ratio, scale_ratio * query_len))
     sigma = max(0.05, target_ratio / 2)
 
     def _bias(ratio):
@@ -459,8 +462,8 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     normalized_scores, is_scale = alignment_adjustment(data, hyperparams['gamma'], scores.device, lambda_max=2, lambda_min=-2)
 
     masked_scores = scores * initial_masks.float()
-    dynamic_score_stride = min(stride, masked_scores.size(-1) // 2)
-    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, dynamic_score_stride, initial_masks.float())
+    adjusted_stride = min(stride, masked_scores.size(-1) // 2)
+    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, adjusted_stride, initial_masks.float())
     dynamic_frames = torch.round(dynamic_idxs * num_frames).int()
     
     video_features = torch.tensor(video_features).cuda()
