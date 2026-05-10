@@ -29,6 +29,9 @@ def calc_iou(candidates, gt):
     return inter.clip(min=0) / union
 
 def build_query_variants(sentence, query_refine=False, query_refine_max=3):
+    sentence = "" if sentence is None else str(sentence).strip()
+    if not sentence:
+        return [{'descriptions': ""}]
     variants = [sentence]
     if query_refine:
         variants = expand_queries(sentence, max_variants=query_refine_max) or [sentence]

@@ -15,6 +15,10 @@ vis_processors = transforms.Compose([
 ])
 #### BLIP-2 Q-Former ####
 
+LENGTH_BIAS_MIN_RATIO = 0.08
+LENGTH_BIAS_MAX_RATIO = 0.6
+LENGTH_BIAS_SCALE = 0.04
+
 
 def gaussian_kernel(size, sigma=1):
     size = int(size) // 2
@@ -56,8 +60,12 @@ def compute_frequency_weights(scores, band_ratios=(0.2, 0.6)):
     return weights / (weights.sum() + 1e-6)
 
 
-def multi_scale_temporal_smoothing(features, base_kernel_size, frequency_scores, window_sizes=None, band_ratios=(0.2, 0.6)):
-    """Apply multi-scale smoothing weighted by frequency band energies from similarity scores."""
+def multi_scale_temporal_smoothing(features, base_kernel_size, similarity_scores, window_sizes=None, band_ratios=(0.2, 0.6)):
+    """Apply multi-scale smoothing weighted by similarity-score frequency bands.
+
+    similarity_scores: 1D/2D similarity sequence used to estimate low/mid/high energy bands.
+    band_ratios: low/mid split points in rFFT bins (low <= band_ratios[0] < band_ratios[1]).
+    """
     num_frames = features.size(0)
     if window_sizes:
         kernel_sizes = [adjust_kernel_size(k, num_frames) for k in window_sizes]
@@ -80,7 +88,7 @@ def multi_scale_temporal_smoothing(features, base_kernel_size, frequency_scores,
     mid = kernel_sizes[len(kernel_sizes) // 2]
     large = kernel_sizes[-1]
 
-    weights = compute_frequency_weights(frequency_scores, band_ratios)
+    weights = compute_frequency_weights(similarity_scores, band_ratios)
     smooth_large = temporal_aware_feature_smoothing(large, features)
     smooth_mid = temporal_aware_feature_smoothing(mid, features)
     smooth_small = temporal_aware_feature_smoothing(small, features)
@@ -100,10 +108,7 @@ def build_length_bias(query_text, weight):
         return None
 
     query_len = len(tokens)
-    min_ratio = 0.08
-    max_ratio = 0.6
-    scale_ratio = 0.04
-    target_ratio = min(max_ratio, max(min_ratio, scale_ratio * query_len))
+    target_ratio = min(LENGTH_BIAS_MAX_RATIO, max(LENGTH_BIAS_MIN_RATIO, LENGTH_BIAS_SCALE * query_len))
     sigma = max(0.05, target_ratio / 2)
 
     def _bias(ratio):
@@ -255,8 +260,7 @@ def alignment_adjustment(data, scale_gamma, device, lambda_max=2, lambda_min=-2)
 
 
 def temporal_aware_feature_smoothing(kernel_size, features):
-    kernel_size = adjust_kernel_size(kernel_size, features.size(0))
-    if kernel_size == 1:
+    if kernel_size <= 1:
         return features
     padding_size = kernel_size // 2
     padded_features = torch.cat((features[0].repeat(padding_size, 1), features, features[-1].repeat(padding_size, 1)), dim=0)
@@ -466,6 +470,7 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
 
     masked_scores = scores * initial_masks.float()
     adjusted_stride = min(stride, masked_scores.size(-1) // 2)
+    # Pre-compute dynamic scores for reflection-aware proposal scoring.
     dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, adjusted_stride, initial_masks.float())
     dynamic_frames = torch.round(dynamic_idxs * num_frames).int()
     

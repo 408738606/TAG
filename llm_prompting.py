@@ -88,7 +88,14 @@ def _normalize_query(text):
 
 
 def expand_queries(text, max_variants=3):
-    """Expand a query with normalization, synonym replacement, and stopword filtering."""
+    """Expand a query with normalization, lightweight synonym replacement, and stopword filtering.
+
+    Args:
+        text: input query string.
+        max_variants: maximum number of variants to return.
+    Returns:
+        List of query strings.
+    """
     base = text.strip() if isinstance(text, str) else str(text).strip()
     if not base:
         return []
