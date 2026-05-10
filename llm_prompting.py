@@ -55,14 +55,14 @@ def filter_and_integrate(sub_query_proposals, relation):
     return proposals.tolist()[:2]
 
 
-_STOPWORDS = {
+STOPWORDS = {
     "a", "an", "the", "and", "or", "to", "of", "in", "on", "at", "with",
     "for", "from", "by", "is", "are", "was", "were", "be", "been", "being",
     "into", "onto", "over", "under", "up", "down", "off", "out", "about",
     "near", "around", "as",
 }
 
-_SYNONYM_MAP = {
+SYNONYM_MAP = {
     "sofa": ["couch"],
     "tv": ["television"],
     "cellphone": ["cell phone", "mobile"],
@@ -91,10 +91,10 @@ def expand_queries(text, max_variants=3):
     """Expand a query with normalization, lightweight synonym replacement, and stopword filtering.
 
     Args:
-        text: input query string.
+        text: input query string (or convertible to string).
         max_variants: maximum number of variants to return.
     Returns:
-        List of query strings.
+        List of query strings; returns [] if input is empty after normalization.
     """
     base = text.strip() if isinstance(text, str) else str(text).strip()
     if not base:
@@ -107,14 +107,14 @@ def expand_queries(text, max_variants=3):
 
     tokens = normalized.split() if normalized else []
     for idx, token in enumerate(tokens):
-        if token in _SYNONYM_MAP:
-            for synonym in _SYNONYM_MAP[token]:
+        if token in SYNONYM_MAP:
+            for synonym in SYNONYM_MAP[token]:
                 new_tokens = tokens.copy()
                 new_tokens[idx] = synonym
                 variants.append(" ".join(new_tokens))
 
     if tokens:
-        content_tokens = [token for token in tokens if token not in _STOPWORDS]
+        content_tokens = [token for token in tokens if token not in STOPWORDS]
         if content_tokens:
             variants.append(" ".join(content_tokens))
 

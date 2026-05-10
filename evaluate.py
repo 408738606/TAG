@@ -29,6 +29,7 @@ def calc_iou(candidates, gt):
     return inter.clip(min=0) / union
 
 def build_query_variants(sentence, query_refine=False, query_refine_max=3):
+    """Build a list of query dicts with optional refinement/expansion."""
     sentence = "" if sentence is None else str(sentence).strip()
     if not sentence:
         return [{'descriptions': ""}]

@@ -15,9 +15,9 @@ vis_processors = transforms.Compose([
 ])
 #### BLIP-2 Q-Former ####
 
-LENGTH_BIAS_MIN_RATIO = 0.08
-LENGTH_BIAS_MAX_RATIO = 0.6
-LENGTH_BIAS_SCALE = 0.04
+LENGTH_BIAS_MIN_RATIO = 0.08  # min span ratio vs. video length
+LENGTH_BIAS_MAX_RATIO = 0.6  # max span ratio vs. video length
+LENGTH_BIAS_SCALE = 0.04  # ratio growth per query token
 
 
 def gaussian_kernel(size, sigma=1):
@@ -63,8 +63,14 @@ def compute_frequency_weights(scores, band_ratios=(0.2, 0.6)):
 def multi_scale_temporal_smoothing(features, base_kernel_size, similarity_scores, window_sizes=None, band_ratios=(0.2, 0.6)):
     """Apply multi-scale smoothing weighted by similarity-score frequency bands.
 
-    similarity_scores: 1D/2D similarity sequence used to estimate low/mid/high energy bands.
-    band_ratios: low/mid split points in rFFT bins (low <= band_ratios[0] < band_ratios[1]).
+    Args:
+        features: frame-level features (T, D).
+        base_kernel_size: base temporal window size.
+        similarity_scores: similarity sequence (T,) or (1, T) for band estimation.
+        window_sizes: optional list of window sizes to override the defaults.
+        band_ratios: low/mid split points in rFFT bins.
+    Returns:
+        Smoothed features with the same shape as input features.
     """
     num_frames = features.size(0)
     if window_sizes:
@@ -98,7 +104,14 @@ def multi_scale_temporal_smoothing(features, base_kernel_size, similarity_scores
 
 
 def build_length_bias(query_text, weight):
-    """Build a length-prior function using query length to adjust span scoring."""
+    """Build a length-prior function using query length to adjust span scoring.
+
+    Args:
+        query_text: original query string.
+        weight: scaling factor for the length prior.
+    Returns:
+        Callable that maps length ratio -> bias score, or None if disabled.
+    """
     if weight <= 0 or not query_text:
         return None
 
@@ -469,9 +482,9 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     normalized_scores, is_scale = alignment_adjustment(data, hyperparams['gamma'], scores.device, lambda_max=2, lambda_min=-2)
 
     masked_scores = scores * initial_masks.float()
-    adjusted_stride = min(stride, masked_scores.size(-1) // 2)
+    clamped_stride = min(stride, masked_scores.size(-1) // 2)
     # Pre-compute dynamic scores for reflection-aware proposal scoring.
-    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, adjusted_stride, initial_masks.float())
+    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, clamped_stride, initial_masks.float())
     dynamic_frames = torch.round(dynamic_idxs * num_frames).int()
     
     video_features = torch.tensor(video_features).cuda()
