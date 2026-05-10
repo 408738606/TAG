@@ -25,6 +25,8 @@ DEFAULT_HYPERPARAMS = {
     "fft_band_mix": False,
     "fft_low_weight": 0.7,
     "fft_high_weight": 0.3,
+    "spectral_whitening": False,
+    "spectral_whitening_strength": 0.5,
     "wavelet_levels": 0,
     "freq_attention": False,
     "freq_attention_strength": 1.0,
@@ -132,10 +134,22 @@ def fft_soft_attenuation(scores, reg_strength):
     return torch.fft.irfft(freq * weights, n=scores.size(-1), dim=-1)
 
 
+def fft_spectral_whitening(scores, strength):
+    if strength is None or strength <= 0:
+        return scores
+    freq = torch.fft.rfft(scores, dim=-1)
+    power = torch.abs(freq) ** 2
+    mean_power = power.mean(dim=0, keepdim=True)
+    eps = 1e-6
+    scale = (mean_power + eps) ** (-0.5 * strength)
+    freq = freq * scale.to(freq.dtype)
+    return torch.fft.irfft(freq, n=scores.size(-1), dim=-1)
+
+
 def apply_similarity_frequency_processing(scores, hyperparams):
     if not hyperparams["fft_smoothing"] and not (
         hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0
-    ) and not hyperparams["fft_band_mix"]:
+    ) and not hyperparams["fft_band_mix"] and not hyperparams["spectral_whitening"]:
         return scores
     scores = scores.float()
     original_scores = scores
@@ -158,6 +172,9 @@ def apply_similarity_frequency_processing(scores, hyperparams):
             raise ValueError("Sum of fft_low_weight and fft_high_weight must be positive.")
         # Weights are treated as relative and normalized by weight_sum.
         scores = (low_weight * low + high_weight * high) / weight_sum
+
+    if hyperparams["spectral_whitening"] and hyperparams["spectral_whitening_strength"] > 0:
+        scores = fft_spectral_whitening(scores, hyperparams["spectral_whitening_strength"])
 
     if hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0:
         scores = fft_soft_attenuation(scores, hyperparams["frequency_reg_strength"])
