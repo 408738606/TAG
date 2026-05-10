@@ -27,7 +27,8 @@ def get_args():
     parser.add_argument('--wavelet_levels', default=None, type=int, help='Number of Haar wavelet levels for multiscale pooling.')
     parser.add_argument('--freq_attention', action='store_true', help='Enable frequency attention for temporal features.')
     parser.add_argument('--freq_attention_strength', default=None, type=float, help='Strength for frequency attention gating.')
-    parser.add_argument('--freq_attention_mode', default=None, choices=['channel', 'frequency', 'both'], help='Frequency attention mode.')
+    parser.add_argument('--freq_attention_mode', default=None, choices=['channel', 'frequency', 'both'],
+                        help='Frequency attention mode: channel (per-channel), frequency (per-band), or both.')
     parser.add_argument('--octave_conv', action='store_true', help='Enable octave-style temporal convolution.')
     parser.add_argument('--octave_alpha', default=None, type=float, help='Low-frequency channel ratio for octave convolution.')
     parser.add_argument('--octave_kernel_size', default=None, type=int, help='Kernel size for octave convolution smoothing.')

@@ -153,6 +153,7 @@ def apply_similarity_frequency_processing(scores, hyperparams):
         high_weight = max(hyperparams["fft_high_weight"], 0.0)
         weight_sum = low_weight + high_weight
         if weight_sum > 0:
+            # Weights are treated as relative and normalized by weight_sum.
             scores = (low_weight * low + high_weight * high) / weight_sum
 
     if hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0:
@@ -360,7 +361,7 @@ def temporal_aware_feature_smoothing(kernel_size, features):
     padding_size = kernel_size // 2
     padded_features = torch.cat((features[0].repeat(padding_size, 1), features, features[-1].repeat(padding_size, 1)), dim=0)
     kernel = torch.ones(padded_features.shape[1], 1, kernel_size, device=features.device, dtype=features.dtype) / kernel_size
-    padded_features = padded_features.unsqueeze(0).permute(0, 2, 1)  # (1, 257, 104)
+    padded_features = padded_features.unsqueeze(0).permute(0, 2, 1)  # (1, channels, sequence_length)
 
     temporal_aware_features = F.conv1d(padded_features, kernel, padding=0, groups=padded_features.shape[1])
     temporal_aware_features = temporal_aware_features.permute(0, 2, 1)
@@ -548,7 +549,7 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
 
     scores = apply_similarity_frequency_processing(scores, hyperparams)
     
-    # scores > 0.2인 마스킹 생성 (Boolean 형태 유지)
+    # Generate masking based on score_threshold (maintain Boolean form)
     initial_masks = scores > hyperparams["score_threshold"]
     masks, masked_indices = scores_masking(scores, initial_masks)
 
