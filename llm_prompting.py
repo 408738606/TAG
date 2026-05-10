@@ -65,7 +65,7 @@ _STOPWORDS = {
 _SYNONYM_MAP = {
     "sofa": ["couch"],
     "tv": ["television"],
-    "cellphone": ["phone", "mobile"],
+    "cellphone": ["cell phone", "mobile"],
     "kitchen": ["cooking area"],
     "cup": ["mug"],
     "fridge": ["refrigerator"],
@@ -88,6 +88,7 @@ def _normalize_query(text):
 
 
 def expand_queries(text, max_variants=3):
+    """Expand a query with normalization, synonym replacement, and stopword filtering."""
     base = text.strip() if isinstance(text, str) else str(text).strip()
     if not base:
         return []

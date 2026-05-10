@@ -57,6 +57,7 @@ def compute_frequency_weights(scores, band_ratios=(0.2, 0.6)):
 
 
 def multi_scale_temporal_smoothing(features, base_kernel_size, frequency_scores, window_sizes=None, band_ratios=(0.2, 0.6)):
+    """Apply multi-scale smoothing weighted by frequency band energies from similarity scores."""
     num_frames = features.size(0)
     if window_sizes:
         kernel_sizes = [adjust_kernel_size(k, num_frames) for k in window_sizes]
@@ -89,9 +90,11 @@ def multi_scale_temporal_smoothing(features, base_kernel_size, frequency_scores,
 
 
 def build_length_bias(query_text, weight):
+    """Build a length-prior function using query length to adjust span scoring."""
     if weight <= 0 or not query_text:
         return None
 
+    query_text = query_text.replace("_", " ")
     tokens = [token for token in re.findall(r"\w+", query_text.lower()) if not token.isdigit()]
     if not tokens:
         return None
