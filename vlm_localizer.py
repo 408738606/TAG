@@ -152,10 +152,10 @@ def apply_similarity_frequency_processing(scores, hyperparams):
         low_weight = hyperparams["fft_low_weight"]
         high_weight = hyperparams["fft_high_weight"]
         if low_weight < 0 or high_weight < 0:
-            raise ValueError("fft_low_weight and fft_high_weight must be non-negative.")
+            raise ValueError("Weight values must be non-negative.")
         weight_sum = low_weight + high_weight
         if weight_sum <= 0:
-            raise ValueError("fft_low_weight and fft_high_weight must sum to a positive value.")
+            raise ValueError("Sum of fft_low_weight and fft_high_weight must be positive.")
         # Weights are treated as relative and normalized by weight_sum.
         scores = (low_weight * low + high_weight * high) / weight_sum
 
@@ -552,7 +552,7 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
 
     scores = apply_similarity_frequency_processing(scores, hyperparams)
     
-    # Generate masking based on score_threshold (maintain Boolean form)
+    # Generate mask based on score_threshold (maintain Boolean form)
     initial_masks = scores > hyperparams["score_threshold"]
     masks, masked_indices = scores_masking(scores, initial_masks)
 
