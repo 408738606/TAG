@@ -6,7 +6,7 @@ import torch
 from tqdm import tqdm
 from vlm_localizer import localize
 import os
-from llm_prompting import select_proposal
+from llm_prompting import select_proposal, expand_queries
 
 def get_args():
     parser = argparse.ArgumentParser(description='Evaluation for training-free video temporal grounding.')
@@ -15,6 +15,8 @@ def get_args():
     parser.add_argument('--use_llm', action='store_true', help='Enable use llm')
     parser.add_argument('--tckmeans', action='store_true', help='Enable use GPU KMeans')
     parser.add_argument('--llm_output', default=None, type=str, help='LLM prompt output. If not specified, use nonly VLM for evaluation.')
+    parser.add_argument('--query_refine', action='store_true', help='Enable query debiasing and expansion.')
+    parser.add_argument('--query_refine_max', default=3, type=int, help='Max number of query variants to use.')
 
     return parser.parse_args()
 
@@ -26,7 +28,16 @@ def calc_iou(candidates, gt):
     union = np.maximum(end, e) - np.minimum(start, s)
     return inter.clip(min=0) / union
 
-def eval_without_llm(data, feature_path, stride, hyperparams, tckmeans):
+def _build_query_json(sentence, query_refine=False, query_refine_max=3):
+    if not query_refine:
+        return [{'descriptions': sentence}]
+    variants = expand_queries(sentence, max_variants=query_refine_max)
+    if not variants:
+        return [{'descriptions': sentence}]
+    return [{'descriptions': variant} for variant in variants]
+
+
+def eval_without_llm(data, feature_path, stride, hyperparams, tckmeans, query_refine=False, query_refine_max=3):
     ious = []
     thresh = np.array([0.3, 0.5, 0.7])
     recall = np.array([0, 0, 0])
@@ -38,7 +49,7 @@ def eval_without_llm(data, feature_path, stride, hyperparams, tckmeans):
         
         for i in range(len(ann['sentences'])):
             gt = ann['timestamps'][i]
-            query_json = [{'descriptions': ann['sentences'][i]}]
+            query_json = _build_query_json(ann['sentences'][i], query_refine, query_refine_max)
             proposals = localize(video_feature, duration, query_json, stride, hyperparams, tckmeans)
             proposals = select_proposal(np.array(proposals))
 
@@ -53,7 +64,7 @@ def eval_without_llm(data, feature_path, stride, hyperparams, tckmeans):
         print(f'R@{th}:', r / len(ious))
 
 
-def eval_with_llm(data, feature_path, stride, hyperparams, tckmeans):
+def eval_with_llm(data, feature_path, stride, hyperparams, tckmeans, query_refine=False, query_refine_max=3):
     ious = []
     thresh = np.array([0.3, 0.5, 0.7])
     recall = np.array([0, 0, 0])
@@ -65,7 +76,7 @@ def eval_with_llm(data, feature_path, stride, hyperparams, tckmeans):
 
         for i in range(len(ann['sentences'])):
             gt = ann['timestamps'][i]
-            query_json = [{'descriptions': ann['sentences'][i]}]
+            query_json = _build_query_json(ann['sentences'][i], query_refine, query_refine_max)
             proposals = localize(video_feature, duration, query_json, stride, hyperparams, tckmeans)
             
             if 'query_json' in ann['response'][i]:
@@ -87,7 +98,7 @@ def eval_with_llm(data, feature_path, stride, hyperparams, tckmeans):
 
 
 
-def eval(data, feature_path, stride, hyperparams, use_llm, tckmeans, pad_sec=0.0):
+def eval(data, feature_path, stride, hyperparams, use_llm, tckmeans, pad_sec=0.0, query_refine=False, query_refine_max=3):
     ious = []
     thresh = np.array([0.3, 0.5, 0.7])
     recall = np.array([0, 0, 0])
@@ -104,7 +115,7 @@ def eval(data, feature_path, stride, hyperparams, use_llm, tckmeans, pad_sec=0.0
 
         for i in range(len(ann['sentences'])):
             gt = ann['timestamps'][i]
-            query_json = [{'descriptions': ann['sentences'][i]}]
+            query_json = _build_query_json(ann['sentences'][i], query_refine, query_refine_max)
             proposals = localize(video_feature, duration, query_json, stride, hyperparams, tckmeans)
             
             if use_llm:
@@ -144,10 +155,10 @@ if __name__=='__main__':
         with open(args.llm_output) as f:
             data = json.load(f)
         if args.use_llm:
-            eval_with_llm(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.tckmeans)
+            eval_with_llm(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.tckmeans, args.query_refine, args.query_refine_max)
         else:
-            eval_without_llm(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.tckmeans)
+            eval_without_llm(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.tckmeans, args.query_refine, args.query_refine_max)
     else:
         with open(dataset['splits'][args.split]['annotation_file']) as f:
             data = json.load(f)
-        eval(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.use_llm, args.tckmeans, dataset['splits'][args.split]['pad_sec'])
+        eval(data, dataset['feature_path'], dataset['stride'], dataset['hyper_parameters'], args.use_llm, args.tckmeans, dataset['splits'][args.split]['pad_sec'], args.query_refine, args.query_refine_max)

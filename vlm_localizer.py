@@ -1,6 +1,7 @@
 import clip
 import torch
 import numpy as np
+import re
 from scipy.optimize import minimize_scalar
 import torch.nn.functional as F
 from lavis.models import load_model_and_preprocess
@@ -21,6 +22,93 @@ def gaussian_kernel(size, sigma=1):
     normal = 1 / (np.sqrt(2.0 * np.pi) * sigma)
     g = np.exp(-x ** 2 / (2.0 * sigma ** 2)) * normal
     return g
+
+
+def adjust_kernel_size(kernel_size, num_frames):
+    kernel_size = max(1, int(kernel_size))
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    if num_frames <= 1:
+        return 1
+    if kernel_size > num_frames:
+        kernel_size = num_frames if num_frames % 2 == 1 else max(1, num_frames - 1)
+    return max(1, kernel_size)
+
+
+def compute_frequency_weights(scores, band_ratios=(0.2, 0.6)):
+    if scores.numel() < 3:
+        return torch.tensor([1 / 3, 1 / 3, 1 / 3], device=scores.device)
+
+    spectrum = torch.fft.rfft(scores.float(), dim=-1).abs()
+    if spectrum.size(-1) <= 2:
+        return torch.tensor([1 / 3, 1 / 3, 1 / 3], device=scores.device)
+
+    spectrum[..., 0] = 0
+    n = spectrum.size(-1)
+    low_end = max(1, int(n * band_ratios[0]))
+    mid_end = max(low_end + 1, int(n * band_ratios[1]))
+
+    low_energy = spectrum[..., 1:low_end].sum()
+    mid_energy = spectrum[..., low_end:mid_end].sum()
+    high_energy = spectrum[..., mid_end:].sum()
+
+    weights = torch.stack([low_energy, mid_energy, high_energy])
+    return weights / (weights.sum() + 1e-6)
+
+
+def multi_scale_temporal_smoothing(features, base_kernel_size, scores, window_sizes=None, band_ratios=(0.2, 0.6)):
+    num_frames = features.size(0)
+    if window_sizes:
+        kernel_sizes = [adjust_kernel_size(k, num_frames) for k in window_sizes]
+    else:
+        kernel_sizes = [
+            adjust_kernel_size(max(3, base_kernel_size // 2), num_frames),
+            adjust_kernel_size(base_kernel_size, num_frames),
+            adjust_kernel_size(base_kernel_size * 2 + 1, num_frames),
+        ]
+    kernel_sizes = sorted(set(kernel_sizes))
+
+    if len(kernel_sizes) == 1:
+        return temporal_aware_feature_smoothing(kernel_sizes[0], features)
+
+    if len(kernel_sizes) == 2:
+        mid = adjust_kernel_size(sum(kernel_sizes) // 2, num_frames)
+        kernel_sizes = [kernel_sizes[0], mid, kernel_sizes[1]]
+
+    small = kernel_sizes[0]
+    mid = kernel_sizes[len(kernel_sizes) // 2]
+    large = kernel_sizes[-1]
+
+    weights = compute_frequency_weights(scores, band_ratios)
+    smooth_large = temporal_aware_feature_smoothing(large, features)
+    smooth_mid = temporal_aware_feature_smoothing(mid, features)
+    smooth_small = temporal_aware_feature_smoothing(small, features)
+
+    return weights[0] * smooth_large + weights[1] * smooth_mid + weights[2] * smooth_small
+
+
+def build_length_bias(query_text, weight):
+    if weight <= 0 or not query_text:
+        return None
+
+    tokens = re.findall(r"\w+", query_text.lower())
+    if not tokens:
+        return None
+
+    query_len = len(tokens)
+    target_ratio = min(0.6, max(0.08, 0.04 * query_len))
+    sigma = max(0.05, target_ratio / 2)
+
+    def _bias(ratio):
+        return weight * np.exp(-((ratio - target_ratio) ** 2) / (2 * sigma ** 2))
+
+    return _bias
+
+
+def extract_query_text(sentences):
+    if isinstance(sentences, (list, tuple)):
+        return " ".join([str(item) for item in sentences if item])
+    return str(sentences) if sentences is not None else ""
 
 
 
@@ -160,9 +248,12 @@ def alignment_adjustment(data, scale_gamma, device, lambda_max=2, lambda_min=-2)
 
 
 def temporal_aware_feature_smoothing(kernel_size, features):
+    kernel_size = adjust_kernel_size(kernel_size, features.size(0))
+    if kernel_size == 1:
+        return features
     padding_size = kernel_size // 2
     padded_features = torch.cat((features[0].repeat(padding_size, 1), features, features[-1].repeat(padding_size, 1)), dim=0)
-    kernel = torch.ones(padded_features.shape[1], 1, kernel_size).cuda() / kernel_size
+    kernel = torch.ones(padded_features.shape[1], 1, kernel_size, device=features.device) / kernel_size
     padded_features = padded_features.unsqueeze(0).permute(0, 2, 1)  # (1, 257, 104)
     padded_features = padded_features.float()
 
@@ -317,7 +408,7 @@ def segment_scenes_by_cluster(cluster_labels):
 
 
 
-def get_proposals_with_scores(scene_segments, cum_scores, frame_scores, num_frames, prior):
+def get_proposals_with_scores(scene_segments, cum_scores, frame_scores, num_frames, prior, dynamic_scores=None, reflection_weight=0.0, length_bias=None):
     proposals = []
     proposals_static_scores = []
     for i in range(len(scene_segments)):
@@ -327,6 +418,14 @@ def get_proposals_with_scores(scene_segments, cum_scores, frame_scores, num_fram
             if (last - start) > num_frames * prior:
                 continue
             score_static = extract_static_score(start, last, cum_scores, len(cum_scores), frame_scores).item()
+
+            if dynamic_scores is not None and reflection_weight > 0:
+                dynamic_segment = dynamic_scores[start:last].mean().item()
+                score_static += reflection_weight * dynamic_segment
+
+            if length_bias is not None:
+                length_ratio = (last - start) / num_frames
+                score_static += length_bias(length_ratio)
             
             proposals.append([start, last])
             proposals_static_scores.append(round(score_static, 4))
@@ -337,6 +436,7 @@ def get_proposals_with_scores(scene_segments, cum_scores, frame_scores, num_fram
 
 def generate_proposal_revise(video_features, sentences, stride, hyperparams, tckmeans):
     num_frames = video_features.shape[0]
+    query_text = extract_query_text(sentences)
 
     with torch.no_grad():
         text = model.tokenizer(sentences, padding='max_length', truncation=True, max_length=35, return_tensors="pt").to(
@@ -356,6 +456,11 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     # Alignment adjustment of similarity scores
     data = scores[:, masks].flatten().cpu().numpy()   # 마스크된 부분만 가져오기    
     normalized_scores, is_scale = alignment_adjustment(data, hyperparams['gamma'], scores.device, lambda_max=2, lambda_min=-2)
+
+    masked_scores = scores * initial_masks.float()
+    dynamic_stride = min(stride, masked_scores.size(-1) // 2)
+    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, dynamic_stride, initial_masks.float())
+    dynamic_frames = torch.round(dynamic_idxs * num_frames).int()
     
     video_features = torch.tensor(video_features).cuda()
     scores_idx = scores_idx.reshape(-1)
@@ -367,8 +472,15 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     selected_video_time_features = torch.cat((selected_video_features, time_features), dim=1)
     selected_video_time_features = selected_video_time_features[masks]
 
-    # Temporal-aware vector smoothing
-    temporal_aware_features = temporal_aware_feature_smoothing(hyperparams['temporal_window_size'], selected_video_time_features)
+    # Temporal-aware vector smoothing (multi-scale frequency-aware)
+    freq_scores = scores[:, masks]
+    temporal_aware_features = multi_scale_temporal_smoothing(
+        selected_video_time_features,
+        hyperparams['temporal_window_size'],
+        freq_scores,
+        window_sizes=hyperparams.get('multi_scale_windows'),
+        band_ratios=hyperparams.get('freq_band_ratios', (0.2, 0.6)),
+    )
     ### TAP ###
 
 
@@ -384,8 +496,19 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     scene_segments = segment_scenes_by_cluster(kmeans_labels)
 
     # proposal generation by using scene segments integration
+    length_bias = build_length_bias(query_text, hyperparams.get('length_bias_weight', 0.1))
+    reflection_weight = hyperparams.get('reflection_weight', 0.15)
     cum_scores = torch.cumsum(normalized_scores, dim=1)[0]
-    final_proposals, final_proposals_static_score = get_proposals_with_scores(scene_segments, cum_scores, normalized_scores, num_frames, hyperparams['prior'])
+    final_proposals, final_proposals_static_score = get_proposals_with_scores(
+        scene_segments,
+        cum_scores,
+        normalized_scores,
+        num_frames,
+        hyperparams['prior'],
+        dynamic_scores=dynamic_scores[0],
+        reflection_weight=reflection_weight,
+        length_bias=length_bias,
+    )
 
     final_proposals = [
         [
@@ -409,12 +532,6 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
 
 
     #### dynamic scoring #####
-    masked_scores = scores * initial_masks.float()
-    stride = min(stride, masked_scores.size(-1) // 2)
-
-    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, stride, initial_masks.float())
-    dynamic_frames = torch.round(dynamic_idxs * num_frames).int()
-    
     for final_proposal in final_proposals:
         current_frame = final_proposal[0]
         dynamic_prefix = dynamic_frames[0][current_frame]

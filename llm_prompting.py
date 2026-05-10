@@ -1,4 +1,5 @@
 import numpy as np
+import re
 
 def calc_iou(candidates, gt):
     start, end = candidates[:,0], candidates[:,1]
@@ -52,3 +53,68 @@ def filter_and_integrate(sub_query_proposals, relation):
     proposals = select_proposal(np.array(searched_proposals))
 
     return proposals.tolist()[:2]
+
+
+_STOPWORDS = {
+    "a", "an", "the", "and", "or", "to", "of", "in", "on", "at", "with",
+    "for", "from", "by", "is", "are", "was", "were", "be", "been", "being",
+    "then", "after", "before", "while", "during", "into", "onto", "over",
+    "under", "up", "down", "off", "out", "about", "near", "around", "as",
+}
+
+_SYNONYM_MAP = {
+    "sofa": ["couch"],
+    "tv": ["television"],
+    "cellphone": ["phone", "mobile phone"],
+    "kitchen": ["cooking area"],
+    "cup": ["mug"],
+    "fridge": ["refrigerator"],
+    "bike": ["bicycle"],
+    "kleenex": ["tissue"],
+    "cabinet": ["cupboard"],
+    "sneakers": ["shoes"],
+}
+
+
+def _normalize_query(text):
+    text = text.strip()
+    if not text:
+        return text
+    text = text.replace("\n", " ").replace("\t", " ")
+    text = re.sub(r"[^\w\s]", " ", text.lower())
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def expand_queries(text, max_variants=3):
+    base = text.strip() if isinstance(text, str) else str(text).strip()
+    if not base:
+        return []
+
+    normalized = _normalize_query(base)
+    variants = [base]
+    if normalized and normalized != base:
+        variants.append(normalized)
+
+    tokens = normalized.split() if normalized else []
+    for idx, token in enumerate(tokens):
+        if token in _SYNONYM_MAP:
+            for synonym in _SYNONYM_MAP[token]:
+                new_tokens = tokens.copy()
+                new_tokens[idx] = synonym
+                variants.append(" ".join(new_tokens))
+
+    if tokens:
+        content_tokens = [token for token in tokens if token not in _STOPWORDS]
+        if content_tokens:
+            variants.append(" ".join(content_tokens))
+
+    deduped = []
+    for variant in variants:
+        variant = variant.strip()
+        if variant and variant not in deduped:
+            deduped.append(variant)
+        if len(deduped) >= max_variants:
+            break
+
+    return deduped
