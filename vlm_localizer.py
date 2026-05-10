@@ -152,9 +152,7 @@ def apply_similarity_frequency_processing(scores, hyperparams):
         low_weight = max(hyperparams["fft_low_weight"], 0.0)
         high_weight = max(hyperparams["fft_high_weight"], 0.0)
         weight_sum = low_weight + high_weight
-        if weight_sum == 0:
-            scores = original_scores
-        else:
+        if weight_sum > 0:
             scores = (low_weight * low + high_weight * high) / weight_sum
 
     if hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0:
@@ -358,9 +356,9 @@ def alignment_adjustment(data, scale_gamma, device, lambda_max=2, lambda_min=-2)
 def temporal_aware_feature_smoothing(kernel_size, features):
     if kernel_size <= 1 or features.size(0) < 2:
         return features
+    features = features.float()
     padding_size = kernel_size // 2
     padded_features = torch.cat((features[0].repeat(padding_size, 1), features, features[-1].repeat(padding_size, 1)), dim=0)
-    padded_features = padded_features.float()
     kernel = torch.ones(padded_features.shape[1], 1, kernel_size, device=features.device, dtype=padded_features.dtype) / kernel_size
     padded_features = padded_features.unsqueeze(0).permute(0, 2, 1)  # (1, 257, 104)
 
