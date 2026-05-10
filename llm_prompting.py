@@ -65,7 +65,7 @@ STOPWORDS = {
 SYNONYM_MAP = {
     "sofa": ["couch"],
     "tv": ["television"],
-    "cellphone": ["cell phone", "mobile"],
+    "cellphone": ["mobile", "phone"],
     "kitchen": ["cooking area"],
     "cup": ["mug"],
     "fridge": ["refrigerator"],

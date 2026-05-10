@@ -478,13 +478,13 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     masks, masked_indices = scores_masking(scores, initial_masks)
 
     # Alignment adjustment of similarity scores
-    data = scores[:, masks].flatten().cpu().numpy()   # 마스크된 부분만 가져오기    
+    data = scores[:, masks].flatten().cpu().numpy()   # masked region only
     normalized_scores, is_scale = alignment_adjustment(data, hyperparams['gamma'], scores.device, lambda_max=2, lambda_min=-2)
 
     masked_scores = scores * initial_masks.float()
-    clamped_stride = min(stride, masked_scores.size(-1) // 2)
+    bounded_stride = min(stride, masked_scores.size(-1) // 2)
     # Pre-compute dynamic scores for reflection-aware proposal scoring.
-    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, clamped_stride, initial_masks.float())
+    dynamic_idxs, dynamic_scores = get_dynamic_scores(masked_scores, bounded_stride, initial_masks.float())
     dynamic_frames = torch.round(dynamic_idxs * num_frames).int()
     
     video_features = torch.tensor(video_features).cuda()

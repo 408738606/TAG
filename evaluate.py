@@ -32,7 +32,7 @@ def build_query_variants(sentence, query_refine=False, query_refine_max=3):
     """Build a list of query dicts with optional refinement/expansion."""
     sentence = "" if sentence is None else str(sentence).strip()
     if not sentence:
-        return [{'descriptions': ""}]
+        return []
     variants = [sentence]
     if query_refine:
         variants = expand_queries(sentence, max_variants=query_refine_max) or [sentence]
@@ -52,6 +52,8 @@ def eval_without_llm(data, feature_path, stride, hyperparams, tckmeans, query_re
         for i in range(len(ann['sentences'])):
             gt = ann['timestamps'][i]
             query_json = build_query_variants(ann['sentences'][i], query_refine, query_refine_max)
+            if not query_json:
+                continue
             proposals = localize(video_feature, duration, query_json, stride, hyperparams, tckmeans)
             proposals = select_proposal(np.array(proposals))
 
@@ -79,6 +81,8 @@ def eval_with_llm(data, feature_path, stride, hyperparams, tckmeans, query_refin
         for i in range(len(ann['sentences'])):
             gt = ann['timestamps'][i]
             query_json = build_query_variants(ann['sentences'][i], query_refine, query_refine_max)
+            if not query_json:
+                continue
             proposals = localize(video_feature, duration, query_json, stride, hyperparams, tckmeans)
             
             if 'query_json' in ann['response'][i]:
@@ -118,6 +122,8 @@ def eval(data, feature_path, stride, hyperparams, use_llm, tckmeans, pad_sec=0.0
         for i in range(len(ann['sentences'])):
             gt = ann['timestamps'][i]
             query_json = build_query_variants(ann['sentences'][i], query_refine, query_refine_max)
+            if not query_json:
+                continue
             proposals = localize(video_feature, duration, query_json, stride, hyperparams, tckmeans)
             
             if use_llm:
