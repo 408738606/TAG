@@ -208,7 +208,7 @@ def avg_pool_time(features, stride=2):
 def repeat_upsample(features, target_len):
     if features.size(0) == target_len:
         return features
-    repeat = int(np.ceil(target_len / features.size(0)))
+    repeat = (target_len + features.size(0) - 1) // features.size(0)
     return features.repeat_interleave(repeat, dim=0)[:target_len]
 
 
