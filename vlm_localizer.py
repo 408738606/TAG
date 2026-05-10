@@ -140,9 +140,9 @@ def apply_similarity_frequency_processing(scores, hyperparams):
     scores = scores.float()
     original_scores = scores
     low = None
-    energy_ratio = hyperparams["fft_energy_ratio"] if hyperparams["fft_adaptive"] else None
 
     if hyperparams["fft_smoothing"] or hyperparams["fft_band_mix"]:
+        energy_ratio = hyperparams["fft_energy_ratio"] if hyperparams["fft_adaptive"] else None
         low = fft_lowpass_filter(original_scores, hyperparams["fft_cutoff"], energy_ratio)
         if hyperparams["fft_smoothing"]:
             scores = low
@@ -359,7 +359,7 @@ def temporal_aware_feature_smoothing(kernel_size, features):
     features = features.float()
     padding_size = kernel_size // 2
     padded_features = torch.cat((features[0].repeat(padding_size, 1), features, features[-1].repeat(padding_size, 1)), dim=0)
-    kernel = torch.ones(padded_features.shape[1], 1, kernel_size, device=features.device, dtype=padded_features.dtype) / kernel_size
+    kernel = torch.ones(padded_features.shape[1], 1, kernel_size, device=features.device, dtype=features.dtype) / kernel_size
     padded_features = padded_features.unsqueeze(0).permute(0, 2, 1)  # (1, 257, 104)
 
     temporal_aware_features = F.conv1d(padded_features, kernel, padding=0, groups=padded_features.shape[1])
