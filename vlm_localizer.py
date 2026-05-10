@@ -27,6 +27,9 @@ DEFAULT_HYPERPARAMS = {
     "fft_high_weight": 0.3,
     "spectral_whitening": False,
     "spectral_whitening_strength": 0.5,
+    "spectral_bandpass": False,
+    "spectral_bandwidth_ratio": 0.25,
+    "spectral_bandpass_strength": 0.7,
     "wavelet_levels": 0,
     "freq_attention": False,
     "freq_attention_strength": 1.0,
@@ -146,10 +149,31 @@ def fft_spectral_whitening(scores, strength):
     return torch.fft.irfft(freq, n=scores.size(-1), dim=-1)
 
 
+def fft_adaptive_bandpass(scores, bandwidth_ratio, strength):
+    if strength is None or strength <= 0:
+        return scores
+    bandwidth_ratio = 0.25 if bandwidth_ratio is None else bandwidth_ratio
+    bandwidth_ratio = float(min(max(bandwidth_ratio, 0.0), 1.0))
+    strength = float(min(max(strength, 0.0), 1.0))
+    freq = torch.fft.rfft(scores, dim=-1)
+    power = torch.abs(freq) ** 2
+    eps = 1e-6
+    freq_bins = torch.linspace(0, 1, freq.size(-1), device=scores.device, dtype=scores.dtype)
+    freq_bins = freq_bins.view(1, -1)
+    total_power = power.sum(dim=-1, keepdim=True) + eps
+    centroid = (power * freq_bins).sum(dim=-1, keepdim=True) / total_power
+    spread = torch.sqrt(((freq_bins - centroid) ** 2 * power).sum(dim=-1, keepdim=True) / total_power)
+    bandwidth = torch.clamp(spread, min=bandwidth_ratio)
+    weights = torch.exp(-0.5 * ((freq_bins - centroid) / (bandwidth + eps)) ** 2)
+    weights = weights.to(freq.dtype)
+    blended = (1 - strength) + strength * weights
+    return torch.fft.irfft(freq * blended, n=scores.size(-1), dim=-1)
+
+
 def apply_similarity_frequency_processing(scores, hyperparams):
     if not hyperparams["fft_smoothing"] and not (
         hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0
-    ) and not hyperparams["fft_band_mix"] and not hyperparams["spectral_whitening"]:
+    ) and not hyperparams["fft_band_mix"] and not hyperparams["spectral_whitening"] and not hyperparams["spectral_bandpass"]:
         return scores
     scores = scores.float()
     original_scores = scores
@@ -175,6 +199,13 @@ def apply_similarity_frequency_processing(scores, hyperparams):
 
     if hyperparams["spectral_whitening"] and hyperparams["spectral_whitening_strength"] > 0:
         scores = fft_spectral_whitening(scores, hyperparams["spectral_whitening_strength"])
+
+    if hyperparams["spectral_bandpass"] and hyperparams["spectral_bandpass_strength"] > 0:
+        scores = fft_adaptive_bandpass(
+            scores,
+            hyperparams["spectral_bandwidth_ratio"],
+            hyperparams["spectral_bandpass_strength"],
+        )
 
     if hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0:
         scores = fft_soft_attenuation(scores, hyperparams["frequency_reg_strength"])

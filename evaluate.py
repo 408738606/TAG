@@ -24,6 +24,9 @@ def get_args():
     parser.add_argument('--fft_high_weight', default=None, type=float, help='Weight for high-frequency band mix.')
     parser.add_argument('--spectral_whitening', action='store_true', help='Enable spectral whitening on similarity scores.')
     parser.add_argument('--spectral_whitening_strength', default=None, type=float, help='Strength for spectral whitening.')
+    parser.add_argument('--spectral_bandpass', action='store_true', help='Enable adaptive spectral bandpass filtering.')
+    parser.add_argument('--spectral_bandwidth_ratio', default=None, type=float, help='Bandwidth ratio for spectral bandpass.')
+    parser.add_argument('--spectral_bandpass_strength', default=None, type=float, help='Strength for spectral bandpass blending.')
     parser.add_argument('--freq_regularization', action='store_true', help='Enable frequency-domain regularization on similarity scores.')
     parser.add_argument('--freq_reg_strength', default=None, type=float, help='Regularization strength for frequency attenuation.')
     parser.add_argument('--wavelet_levels', default=None, type=int, help='Number of Haar wavelet levels for multiscale pooling.')
@@ -61,6 +64,12 @@ def apply_hyperparam_overrides(hyperparams, args):
         hyperparams['spectral_whitening'] = True
     if args.spectral_whitening_strength is not None:
         hyperparams['spectral_whitening_strength'] = args.spectral_whitening_strength
+    if args.spectral_bandpass:
+        hyperparams['spectral_bandpass'] = True
+    if args.spectral_bandwidth_ratio is not None:
+        hyperparams['spectral_bandwidth_ratio'] = args.spectral_bandwidth_ratio
+    if args.spectral_bandpass_strength is not None:
+        hyperparams['spectral_bandpass_strength'] = args.spectral_bandpass_strength
     if args.freq_regularization:
         hyperparams['frequency_regularization'] = True
     if args.freq_reg_strength is not None:

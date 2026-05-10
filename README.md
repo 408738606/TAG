@@ -96,6 +96,7 @@ You can enable the frequency-domain enhancements described in the report via CLI
 - **Adaptive FFT cutoff**: `--fft_adaptive --fft_energy_ratio 0.9`
 - **FFT band mixing (low/high fusion)**: `--fft_band_mix --fft_low_weight 0.7 --fft_high_weight 0.3`
 - **Spectral whitening**: `--spectral_whitening --spectral_whitening_strength 0.5`
+- **Adaptive spectral bandpass**: `--spectral_bandpass --spectral_bandwidth_ratio 0.25 --spectral_bandpass_strength 0.7`
 - **Frequency regularization**: `--freq_regularization --freq_reg_strength 0.5`
 - **Wavelet multi-scale pooling**: `--wavelet_levels 1`
 - **Frequency attention**: `--freq_attention --freq_attention_mode channel --freq_attention_strength 1.0`
@@ -110,10 +111,11 @@ The following frequency-domain improvements are implemented in this repo for fur
 2. **Adaptive FFT cutoff** using an energy ratio to retain dominant spectral components automatically.
 3. **FFT band mixing** to blend low-frequency trend with high-frequency boundaries.
 4. **Spectral whitening** to flatten dominant spectral peaks and emphasize discriminative changes.
-5. **Frequency-domain regularization** via soft attenuation of higher frequencies.
-6. **Wavelet multiscale pooling** to capture coarse trends and fine detail jointly.
-7. **Frequency attention** to reweight informative spectral channels or bands.
-8. **Octave-style temporal convolution** to model low/high temporal frequencies efficiently.
+5. **Adaptive spectral bandpass** to focus on the dominant spectral centroid with learned bandwidth.
+6. **Frequency-domain regularization** via soft attenuation of higher frequencies.
+7. **Wavelet multiscale pooling** to capture coarse trends and fine detail jointly.
+8. **Frequency attention** to reweight informative spectral channels or bands.
+9. **Octave-style temporal convolution** to model low/high temporal frequencies efficiently.
 
 
 ### OOD Splits
