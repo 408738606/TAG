@@ -149,12 +149,15 @@ def apply_similarity_frequency_processing(scores, hyperparams):
 
     if hyperparams["fft_band_mix"]:
         high = original_scores - low
-        low_weight = max(hyperparams["fft_low_weight"], 0.0)
-        high_weight = max(hyperparams["fft_high_weight"], 0.0)
+        low_weight = hyperparams["fft_low_weight"]
+        high_weight = hyperparams["fft_high_weight"]
+        if low_weight < 0 or high_weight < 0:
+            raise ValueError("fft_low_weight and fft_high_weight must be non-negative.")
         weight_sum = low_weight + high_weight
-        if weight_sum > 0:
-            # Weights are treated as relative and normalized by weight_sum.
-            scores = (low_weight * low + high_weight * high) / weight_sum
+        if weight_sum <= 0:
+            raise ValueError("fft_low_weight and fft_high_weight must sum to a positive value.")
+        # Weights are treated as relative and normalized by weight_sum.
+        scores = (low_weight * low + high_weight * high) / weight_sum
 
     if hyperparams["frequency_regularization"] and hyperparams["frequency_reg_strength"] > 0:
         scores = fft_soft_attenuation(scores, hyperparams["frequency_reg_strength"])

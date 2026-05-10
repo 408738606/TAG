@@ -28,7 +28,7 @@ def get_args():
     parser.add_argument('--freq_attention', action='store_true', help='Enable frequency attention for temporal features.')
     parser.add_argument('--freq_attention_strength', default=None, type=float, help='Strength for frequency attention gating.')
     parser.add_argument('--freq_attention_mode', default=None, choices=['channel', 'frequency', 'both'],
-                        help='Frequency attention mode: channel (per-channel), frequency (per-band), or both.')
+                        help='Frequency attention mode: channel (per-channel), frequency (per-frequency bin), or both.')
     parser.add_argument('--octave_conv', action='store_true', help='Enable octave-style temporal convolution.')
     parser.add_argument('--octave_alpha', default=None, type=float, help='Low-frequency channel ratio for octave convolution.')
     parser.add_argument('--octave_kernel_size', default=None, type=int, help='Kernel size for octave convolution smoothing.')
