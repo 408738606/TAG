@@ -1,11 +1,13 @@
 from data_configs import DATASETS
 import argparse
 import json
+import os
+
 import numpy as np
 import torch
 from tqdm import tqdm
+
 from vlm_localizer import localize
-import os
 from llm_prompting import get_debiased_queries, select_proposal
 from prototype_library import (
     build_prototype_library,
@@ -78,6 +80,7 @@ def eval(
     recall = np.array([0, 0, 0])
 
     debias_cfg = merge_config(DEFAULT_DEBIAS_CONFIG, debias_config)
+    debias_cfg["enabled"] = debias_cfg["enabled"] or use_debias
     proto_cfg = merge_config(DEFAULT_PROTOTYPE_CONFIG, prototype_config)
     
     pbar = tqdm(data.items())
@@ -97,7 +100,7 @@ def eval(
                 response_entry = ann['response'][i]
 
             frame_descriptions = extract_frame_descriptions(ann, response_entry, frame_desc_map, vid)
-            if use_llm or use_debias or debias_cfg["enabled"]:
+            if use_llm or debias_cfg["enabled"]:
                 queries = get_debiased_queries(
                     ann['sentences'][i],
                     response_entry=response_entry if use_llm else None,

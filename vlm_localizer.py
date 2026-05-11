@@ -5,6 +5,7 @@ from scipy.optimize import minimize_scalar
 import torch.nn.functional as F
 from lavis.models import load_model_and_preprocess
 from torchvision import transforms
+from prototype_library import rerank_proposals_with_prototypes
 
 #### BLIP-2 Q-Former ####
 model, vis_processors, text_processors = load_model_and_preprocess("blip2_image_text_matching", "coco", device='cuda',
@@ -504,8 +505,6 @@ def localize(
             dynamic_pred = pre_proposals[0] / num_frames * duration
             scores = scores[0]
             if prototype_context and segment_descriptions:
-                from prototype_library import rerank_proposals_with_prototypes
-
                 proto_config = {**DEFAULT_PROTO_CONFIG, **hyperparams.get("prototype", {})}
                 proposal_items = [
                     [float(static_pred[i][0]), float(static_pred[i][1]), float(scores[i])]

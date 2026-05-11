@@ -89,7 +89,7 @@ def heuristic_debias_variants(query: str, max_variants: int = 3) -> List[str]:
         if replaced_query and replaced_query not in variants and replaced_query != query:
             variants.append(replaced_query)
 
-    if len(tokens) > 3:
+    if len(tokens) > 5:
         shortened = " ".join(tokens[:3] + tokens[-2:])
         if shortened and shortened not in variants and shortened != query:
             variants.append(shortened)

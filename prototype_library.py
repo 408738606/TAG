@@ -100,7 +100,7 @@ def build_prototype_library(
                 continue
             centroid = kmeans.cluster_centers_[cluster_id].reshape(1, -1)
             sims = cosine_similarity(tfidf[cluster_indices], centroid).reshape(-1)
-            best_idx = cluster_indices[int(sims.argmax())]
+            best_idx = cluster_indices[sims.argmax()]
             prototype_indices.append(best_idx)
 
     prototype_descriptions = [descriptions[idx] for idx in prototype_indices]
@@ -145,7 +145,7 @@ def score_query_to_prototypes(query: str, library: PrototypeLibrary) -> Tuple[Op
 
     query_vec = library.vectorizer.transform([query]).toarray()
     sims = cosine_similarity(query_vec, library.prototype_vectors).reshape(-1)
-    best_idx = int(sims.argmax())
+    best_idx = sims.argmax()
     return library.prototype_descriptions[best_idx], float(sims[best_idx])
 
 
