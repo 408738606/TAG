@@ -70,6 +70,8 @@ def eval(
 
     Notes:
         When debias_queries is True, only the selected_query is evaluated (no multi-variant expansion).
+        If no proposals are generated, a [0.0, 0.0] fallback is used, yielding IoU=0.
+        Predictions store both the original query and selected query for traceability.
     """
     ious = []
     thresh = np.array([0.3, 0.5, 0.7])

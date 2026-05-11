@@ -56,7 +56,9 @@ def segment_iou(seg_a: Tuple[float, float], seg_b: Tuple[float, float]) -> float
     start = max(seg_a[0], seg_b[0])
     end = min(seg_a[1], seg_b[1])
     inter = max(end - start, 0.0)
-    union = max(seg_a[1], seg_b[1]) - min(seg_a[0], seg_b[0])
+    len_a = max(seg_a[1] - seg_a[0], 0.0)
+    len_b = max(seg_b[1] - seg_b[0], 0.0)
+    union = len_a + len_b - inter
     return inter / union if union > 0 else 0.0
 
 

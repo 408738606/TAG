@@ -64,7 +64,7 @@ def select_debiased_query(
     min_similarity: float = 0.2,
     device: str = 'cuda',
 ) -> Tuple[Optional[str], Dict[str, object]]:
-    """Select the most faithful query rewrite using similarity to visual descriptions.
+    """Select the query candidate most similar to visual descriptions.
 
     Args:
         candidates: Candidate query rewrites (first item should be the original query).

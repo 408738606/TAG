@@ -19,7 +19,7 @@ vis_processors = transforms.Compose([
 
 @torch.no_grad()
 def encode_texts(texts, device='cuda', max_length=35):
-    """Encode text queries into BLIP-2 embeddings.
+    """Encode text strings into BLIP-2 embeddings.
 
     Args:
         texts: A string or list of strings to encode.
