@@ -76,15 +76,20 @@ def normalize_query(query: str) -> str:
     return " ".join(cleaned.lower().split())
 
 
-def heuristic_debias_variants(query: str, max_variants: int = 3) -> List[str]:
+def heuristic_debias_variants(
+    query: str,
+    max_variants: int = 3,
+    synonym_map: Optional[Dict[str, str]] = None,
+) -> List[str]:
     variants: List[str] = []
     normalized = normalize_query(query)
     if normalized and normalized != query:
         variants.append(normalized)
 
     tokens = normalized.split()
+    synonym_map = synonym_map or _DEFAULT_SYNONYMS
     if tokens:
-        replaced = [_DEFAULT_SYNONYMS.get(token, token) for token in tokens]
+        replaced = [synonym_map.get(token, token) for token in tokens]
         replaced_query = " ".join(replaced)
         if replaced_query and replaced_query not in variants and replaced_query != query:
             variants.append(replaced_query)
@@ -125,6 +130,7 @@ def get_debiased_queries(
     frame_descriptions: Optional[List[str]] = None,
     max_variants: int = 3,
     min_similarity: float = 0.15,
+    synonym_map: Optional[Dict[str, str]] = None,
 ) -> List[str]:
     variants: List[str] = [query]
 
@@ -137,7 +143,9 @@ def get_debiased_queries(
         if isinstance(extra_queries, list):
             variants.extend([str(item) for item in extra_queries if item])
 
-    variants.extend(heuristic_debias_variants(query, max_variants=max_variants))
+    variants.extend(
+        heuristic_debias_variants(query, max_variants=max_variants, synonym_map=synonym_map)
+    )
 
     unique_variants = []
     seen = set()

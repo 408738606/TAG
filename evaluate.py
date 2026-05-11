@@ -219,10 +219,10 @@ if __name__=='__main__':
         segment_desc_map = load_segment_descriptions(args.segment_desc)
 
     hyperparams = dataset["hyper_parameters"]
-    debias_cfg = merge_config(DEFAULT_DEBIAS_CONFIG, hyperparams.get("debias"))
     proto_override = hyperparams.get("prototype") or {}
     proto_cfg = merge_config(DEFAULT_PROTOTYPE_CONFIG, proto_override)
     if segment_desc_map and "enabled" not in proto_override:
+        # Auto-enable prototype guidance when segment descriptions are provided.
         proto_cfg["enabled"] = True
 
     prototype_context = None
@@ -250,6 +250,6 @@ if __name__=='__main__':
         frame_desc_map=frame_desc_map,
         prototype_context=prototype_context,
         segment_desc_map=segment_desc_map,
-        debias_config=debias_cfg,
+        debias_config=hyperparams.get("debias"),
         prototype_config=proto_cfg,
     )

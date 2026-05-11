@@ -1,11 +1,14 @@
 from dataclasses import dataclass
 import json
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, Tuple, TYPE_CHECKING, Union
 
 import numpy as np
 
 if TYPE_CHECKING:
     from sklearn.feature_extraction.text import TfidfVectorizer
+
+SegmentDescription = Dict[str, Union[float, str]]
+SegmentMap = Dict[str, List[SegmentDescription]]
 
 
 @dataclass
@@ -15,13 +18,13 @@ class PrototypeLibrary:
     prototype_vectors: np.ndarray
 
 
-def load_segment_descriptions(path: str) -> Dict[str, List[Dict[str, object]]]:
+def load_segment_descriptions(path: str) -> SegmentMap:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     if isinstance(data, dict):
         if all(isinstance(value, list) for value in data.values()):
-            normalized_map: Dict[str, List[Dict[str, object]]] = {}
+            normalized_map: SegmentMap = {}
             for vid, segments in data.items():
                 normalized_segments = []
                 for segment in segments:
@@ -35,7 +38,7 @@ def load_segment_descriptions(path: str) -> Dict[str, List[Dict[str, object]]]:
         if "segments" in data and isinstance(data["segments"], list):
             data = data["segments"]
 
-    segment_map: Dict[str, List[Dict[str, object]]] = {}
+    segment_map: SegmentMap = {}
     if isinstance(data, list):
         for entry in data:
             if not isinstance(entry, dict):
@@ -51,7 +54,7 @@ def load_segment_descriptions(path: str) -> Dict[str, List[Dict[str, object]]]:
     return segment_map
 
 
-def _normalize_segment_entry(entry: Dict[str, object]) -> Optional[Dict[str, object]]:
+def _normalize_segment_entry(entry: Dict[str, object]) -> Optional[SegmentDescription]:
     description = entry.get("description") or entry.get("caption") or entry.get("text")
     timestamp = entry.get("timestamp") or entry.get("timestamps")
     start = entry.get("start")
@@ -64,7 +67,7 @@ def _normalize_segment_entry(entry: Dict[str, object]) -> Optional[Dict[str, obj
     return {"start": float(start), "end": float(end), "description": str(description)}
 
 
-def flatten_descriptions(segment_map: Dict[str, List[Dict[str, object]]]) -> List[str]:
+def flatten_descriptions(segment_map: SegmentMap) -> List[str]:
     descriptions: List[str] = []
     for segments in segment_map.values():
         for segment in segments:
@@ -75,7 +78,7 @@ def flatten_descriptions(segment_map: Dict[str, List[Dict[str, object]]]) -> Lis
 
 
 def build_prototype_library(
-    segment_map: Dict[str, List[Dict[str, object]]],
+    segment_map: SegmentMap,
     num_prototypes: int = 120,
     random_state: int = 60,
     max_features: int = 5000,
@@ -165,7 +168,7 @@ def score_query_to_texts(query: str, texts: List[str], library: PrototypeLibrary
 def rerank_proposals_with_prototypes(
     proposals: List[List[float]],
     query: str,
-    segment_descriptions: List[Dict[str, object]],
+    segment_descriptions: List[SegmentDescription],
     library: PrototypeLibrary,
     weight: float = 0.2,
 ) -> Tuple[List[List[float]], Optional[Dict[str, object]]]:

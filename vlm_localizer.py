@@ -211,7 +211,7 @@ def frequency_adaptive_temporal_enhancement(features, config):
     weights[high_mask] *= cfg["high_gain"]
 
     if cfg["adaptive_strength"] > 0:
-        energy = freq.abs().mean(dim=1)
+        energy = freq.abs().mean(dim=tuple(range(1, freq.ndim)))
         energy = energy / (energy.mean() + 1e-6)
         adaptive = 1 + cfg["adaptive_strength"] * (energy - 1)
         weights = weights * adaptive
