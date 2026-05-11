@@ -14,6 +14,22 @@ vis_processors = transforms.Compose([
 ])
 #### BLIP-2 Q-Former ####
 
+DEFAULT_FREQ_ENHANCE = {
+    "enabled": True,
+    "low_freq_ratio": 0.15,
+    "high_freq_ratio": 0.55,
+    "low_gain": 0.9,
+    "mid_gain": 1.2,
+    "high_gain": 0.75,
+    "adaptive_strength": 0.35,
+    "min_gain": 0.1,
+    "max_gain": 2.5,
+}
+
+DEFAULT_PROTO_CONFIG = {
+    "weight": 0.2,
+}
+
 
 def gaussian_kernel(size, sigma=1):
     size = int(size) // 2
@@ -171,6 +187,37 @@ def temporal_aware_feature_smoothing(kernel_size, features):
     temporal_aware_features = temporal_aware_features[0]
 
     return temporal_aware_features
+
+
+def frequency_adaptive_temporal_enhancement(features, config):
+    cfg = {**DEFAULT_FREQ_ENHANCE, **(config or {})}
+    if not cfg.get("enabled", False):
+        return features
+
+    original_dtype = features.dtype
+    features = features.float()
+    freq = torch.fft.rfft(features, dim=0)
+    freqs = torch.linspace(0, 1, freq.size(0), device=features.device)
+
+    weights = torch.ones_like(freqs)
+    low_mask = freqs < cfg["low_freq_ratio"]
+    mid_mask = (freqs >= cfg["low_freq_ratio"]) & (freqs <= cfg["high_freq_ratio"])
+    high_mask = freqs > cfg["high_freq_ratio"]
+
+    weights[low_mask] *= cfg["low_gain"]
+    weights[mid_mask] *= cfg["mid_gain"]
+    weights[high_mask] *= cfg["high_gain"]
+
+    if cfg["adaptive_strength"] > 0:
+        energy = freq.abs().mean(dim=1)
+        energy = energy / (energy.mean() + 1e-6)
+        adaptive = 1 + cfg["adaptive_strength"] * (energy - 1)
+        weights = weights * adaptive
+
+    weights = weights.clamp(min=cfg["min_gain"], max=cfg["max_gain"])
+    freq = freq * weights[:, None]
+    enhanced = torch.fft.irfft(freq, n=features.size(0), dim=0)
+    return enhanced.to(original_dtype)
 
 
 
@@ -360,6 +407,9 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     video_features = torch.tensor(video_features).cuda()
     scores_idx = scores_idx.reshape(-1)
     selected_video_features = video_features[torch.arange(num_frames), scores_idx]
+
+    freq_config = hyperparams.get("freq_enhance", DEFAULT_FREQ_ENHANCE)
+    selected_video_features = frequency_adaptive_temporal_enhancement(selected_video_features, freq_config)
     
     ### TAP ###
     # Time Positional Encoding
@@ -431,7 +481,16 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
 
 
 
-def localize(video_feature, duration, query_json, stride, hyperparams, tckmeans=False):
+def localize(
+    video_feature,
+    duration,
+    query_json,
+    stride,
+    hyperparams,
+    tckmeans=False,
+    prototype_context=None,
+    segment_descriptions=None,
+):
     answer = []
     for query in query_json:
         proposals, scores, pre_proposals, num_frames = generate_proposal_revise(video_feature, query['descriptions'], stride, hyperparams, tckmeans)
@@ -444,6 +503,25 @@ def localize(video_feature, duration, query_json, stride, hyperparams, tckmeans=
             static_pred = proposals[0] / num_frames * duration
             dynamic_pred = pre_proposals[0] / num_frames * duration
             scores = scores[0]
+            if prototype_context and segment_descriptions:
+                from prototype_library import rerank_proposals_with_prototypes
+
+                proto_config = {**DEFAULT_PROTO_CONFIG, **hyperparams.get("prototype", {})}
+                proposal_items = [
+                    [float(static_pred[i][0]), float(static_pred[i][1]), float(scores[i])]
+                    for i in range(len(scores))
+                ]
+                reranked, prototype_evidence = rerank_proposals_with_prototypes(
+                    proposal_items,
+                    query["descriptions"],
+                    segment_descriptions,
+                    prototype_context,
+                    weight=proto_config["weight"],
+                )
+                if reranked:
+                    scores = torch.tensor([item[2] for item in reranked], device=scores.device)
+                if prototype_evidence:
+                    query["prototype"] = prototype_evidence
             scores = scores / scores.max()
 
         query['response'] = []

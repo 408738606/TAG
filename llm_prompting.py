@@ -1,4 +1,6 @@
 import numpy as np
+import re
+from typing import Dict, List, Optional
 
 def calc_iou(candidates, gt):
     start, end = candidates[:,0], candidates[:,1]
@@ -52,3 +54,103 @@ def filter_and_integrate(sub_query_proposals, relation):
     proposals = select_proposal(np.array(searched_proposals))
 
     return proposals.tolist()[:2]
+
+
+_DEFAULT_SYNONYMS: Dict[str, str] = {
+    "commence": "start",
+    "purchase": "buy",
+    "observe": "watch",
+    "relocate": "move",
+    "assists": "helps",
+    "assisting": "helping",
+    "utilize": "use",
+    "speaking": "talking",
+    "child": "kid",
+    "sofa": "couch",
+    "automobile": "car",
+}
+
+
+def normalize_query(query: str) -> str:
+    cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", query)
+    return " ".join(cleaned.lower().split())
+
+
+def heuristic_debias_variants(query: str, max_variants: int = 3) -> List[str]:
+    variants: List[str] = []
+    normalized = normalize_query(query)
+    if normalized and normalized != query:
+        variants.append(normalized)
+
+    tokens = normalized.split()
+    if tokens:
+        replaced = [_DEFAULT_SYNONYMS.get(token, token) for token in tokens]
+        replaced_query = " ".join(replaced)
+        if replaced_query and replaced_query not in variants and replaced_query != query:
+            variants.append(replaced_query)
+
+    if len(tokens) > 3:
+        shortened = " ".join(tokens[:3] + tokens[-2:])
+        if shortened and shortened not in variants and shortened != query:
+            variants.append(shortened)
+
+    return variants[:max_variants]
+
+
+def filter_queries_by_frame_similarity(
+    queries: List[str],
+    frame_descriptions: List[str],
+    min_similarity: float = 0.15,
+) -> List[str]:
+    if not frame_descriptions:
+        return queries
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
+    corpus = queries + frame_descriptions
+    vectorizer = TfidfVectorizer(stop_words="english", ngram_range=(1, 2))
+    vectors = vectorizer.fit_transform(corpus)
+    query_vecs = vectors[: len(queries)]
+    frame_vecs = vectors[len(queries) :]
+
+    sims = cosine_similarity(query_vecs, frame_vecs).max(axis=1)
+    filtered = [query for query, score in zip(queries, sims) if score >= min_similarity]
+    return filtered if filtered else queries[:1]
+
+
+def get_debiased_queries(
+    query: str,
+    response_entry: Optional[Dict[str, object]] = None,
+    frame_descriptions: Optional[List[str]] = None,
+    max_variants: int = 3,
+    min_similarity: float = 0.15,
+) -> List[str]:
+    variants: List[str] = [query]
+
+    if response_entry:
+        llm_queries = response_entry.get("query_json")
+        if isinstance(llm_queries, list) and llm_queries:
+            descriptions = llm_queries[0].get("descriptions", [])
+            variants.extend([str(item) for item in descriptions if item])
+        extra_queries = response_entry.get("debiased_queries")
+        if isinstance(extra_queries, list):
+            variants.extend([str(item) for item in extra_queries if item])
+
+    variants.extend(heuristic_debias_variants(query, max_variants=max_variants))
+
+    unique_variants = []
+    seen = set()
+    for variant in variants:
+        cleaned = " ".join(str(variant).split())
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        unique_variants.append(cleaned)
+
+    unique_variants = unique_variants[:max_variants]
+
+    if frame_descriptions:
+        return filter_queries_by_frame_similarity(unique_variants, frame_descriptions, min_similarity)
+
+    return unique_variants

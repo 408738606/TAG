@@ -134,3 +134,31 @@ python evaluate.py --dataset charades --split novel-word --tckmeans
 ## Acknowledgement
 
 This repository is built upon the official implementation of [TFVTG (ECCV 2024)](https://github.com/minghangz/TFVTG). We thank the authors for their valuable contributions and open-source code.
+
+## FreqProto-TAG Extensions
+
+This implementation includes optional frequency-domain enhancement, query debiasing, and prototype-guided reranking.
+
+- **Frequency-Adaptive Temporal Enhancement** is enabled by default in the localizer (can be disabled by setting `freq_enhance.enabled` to `False` in `data_configs.py`).
+- **LLM Query Debiasing + Cross-modal Verification**: add `--use_debias` and provide keyframe descriptions with `--frame_desc`.
+- **Prototype Guidance**: provide segment descriptions with `--segment_desc` (optionally cache prototypes with `--prototype_cache`).
+
+Example:
+
+```bash
+python evaluate.py --dataset charades --use_debias \
+  --frame_desc datasets/charades/frame_descriptions.json \
+  --segment_desc datasets/charades/segment_descriptions.json \
+  --prototype_cache datasets/charades/prototype_cache.json \
+  --tckmeans
+```
+
+Segment description JSON should map video IDs to a list of segments:
+
+```json
+{
+  "video_0001": [
+    {"start": 12.0, "end": 18.0, "description": "a person sits on a sofa reading a book"}
+  ]
+}
+```
