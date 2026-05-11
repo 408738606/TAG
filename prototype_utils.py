@@ -1,5 +1,6 @@
 import json
 import os
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
@@ -9,7 +10,8 @@ import torch.nn.functional as F
 from vlm_localizer import encode_texts
 
 
-class PrototypeLibrary(TypedDict):
+@dataclass
+class PrototypeLibrary:
     embeddings: torch.Tensor
     texts: List[str]
 
@@ -33,13 +35,13 @@ def load_prototype_library(path: str, device: str = 'cuda') -> PrototypeLibrary:
         data = np.load(path, allow_pickle=True)
         embeddings = torch.tensor(data['embeddings'], device=device)
         texts = data['texts'].tolist()
-        return {'embeddings': embeddings, 'texts': texts}
+        return PrototypeLibrary(embeddings=embeddings, texts=texts)
     if path.endswith('.json'):
         with open(path, 'r', encoding='utf-8') as f:
             payload = json.load(f)
         embeddings = torch.tensor(payload['embeddings'], device=device)
         texts = payload['texts']
-        return {'embeddings': embeddings, 'texts': texts}
+        return PrototypeLibrary(embeddings=embeddings, texts=texts)
     raise ValueError(f'Unsupported prototype library format: {path}')
 
 
@@ -85,8 +87,8 @@ def apply_prototype_guidance(
     if not proposals or not prototype_lib or video_id not in segment_map:
         return proposals, None
 
-    proto_embeddings = prototype_lib['embeddings'].to(device)
-    proto_texts = prototype_lib['texts']
+    proto_embeddings = prototype_lib.embeddings.to(device)
+    proto_texts = prototype_lib.texts
     if proto_embeddings.numel() == 0:
         return proposals, None
 

@@ -44,7 +44,7 @@ def encode_descriptions(descriptions: List[str], batch_size: int = 64, device: s
 
 
 def build_prototypes(embeddings: np.ndarray, descriptions: List[str], num_clusters: int, seed: int = 60):
-    """Cluster segment descriptions with K-Means and return prototype centroids and texts (seed=60 for TAG parity)."""
+    """Cluster segment descriptions with K-Means and return prototype centroids and texts (seed=60 matches TAG KMeans)."""
     cluster_count = min(num_clusters, len(descriptions))
     if cluster_count <= 0:
         return np.empty((0, 0), dtype=np.float32), [], np.array([], dtype=np.int64)

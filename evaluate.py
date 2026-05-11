@@ -50,7 +50,10 @@ def eval(
     prototype_weight=0.2,
     save_predictions=None,
 ):
-    """Run evaluation with optional debiasing, prototype guidance, and prediction export."""
+    """Run evaluation with optional debiasing, prototype guidance, and prediction export.
+
+    When debias_queries is True, only the selected_query is evaluated (no multi-variant expansion).
+    """
     ious = []
     thresh = np.array([0.3, 0.5, 0.7])
     recall = np.array([0, 0, 0])

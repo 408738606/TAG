@@ -198,6 +198,8 @@ def frequency_adaptive_enhancement(features, config):
     """Apply FFT-based frequency filtering to enhance temporal features."""
     if not config or not config.get('enabled', False):
         return features
+    if features.size(0) < 4:
+        return features
     dtype = features.dtype
     signal = torch.fft.rfft(features.float(), dim=0)
     weights = build_frequency_weights(signal.size(0), config, features.device)
