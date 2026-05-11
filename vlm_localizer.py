@@ -14,6 +14,16 @@ vis_processors = transforms.Compose([
 ])
 #### BLIP-2 Q-Former ####
 
+@torch.no_grad()
+def encode_texts(texts, device='cuda', max_length=35):
+    if isinstance(texts, str):
+        texts = [texts]
+    text = model.tokenizer(texts, padding='max_length', truncation=True, max_length=max_length, return_tensors="pt").to(
+        device)
+    text_output = model.Qformer.bert(text.input_ids, attention_mask=text.attention_mask, return_dict=True)
+    text_feat = model.text_proj(text_output.last_hidden_state[:, 0, :])
+    return text_feat
+
 
 def gaussian_kernel(size, sigma=1):
     size = int(size) // 2
@@ -157,6 +167,42 @@ def alignment_adjustment(data, scale_gamma, device, lambda_max=2, lambda_min=-2)
 
     return normalized_scores, is_scale
 
+
+def build_frequency_weights(length, config, device):
+    if not config or not config.get('enabled', False):
+        return None
+    mid = config.get('mid_freq', 0.35)
+    bandwidth = max(config.get('bandwidth', 0.2), 1e-6)
+    high_boost = max(config.get('high_boost', 0.5), 0.0)
+    low_cut = config.get('low_cut', 0.05)
+    low_damp = max(config.get('low_damp', 0.0), 0.0)
+    noise_cut = config.get('noise_cut', 0.85)
+    noise_damp = max(config.get('noise_damp', 0.2), 0.0)
+    min_weight = max(config.get('min_weight', 0.2), 0.0)
+
+    freqs = torch.linspace(0, 1, steps=length, device=device)
+    weights = torch.ones_like(freqs)
+    if high_boost > 0:
+        weights = weights + high_boost * torch.exp(-0.5 * ((freqs - mid) / bandwidth) ** 2)
+    if low_damp > 0:
+        weights = torch.where(freqs <= low_cut, weights * (1 - low_damp), weights)
+    if noise_damp > 0:
+        weights = torch.where(freqs >= noise_cut, weights * (1 - noise_damp), weights)
+
+    return torch.clamp(weights, min=min_weight)
+
+
+def frequency_adaptive_enhancement(features, config):
+    if not config or not config.get('enabled', False):
+        return features
+    dtype = features.dtype
+    signal = torch.fft.rfft(features.float(), dim=0)
+    weights = build_frequency_weights(signal.size(0), config, features.device)
+    if weights is None:
+        return features
+    signal = signal * weights[:, None]
+    enhanced = torch.fft.irfft(signal, n=features.size(0), dim=0)
+    return enhanced.to(dtype)
 
 
 def temporal_aware_feature_smoothing(kernel_size, features):
@@ -360,6 +406,10 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     video_features = torch.tensor(video_features).cuda()
     scores_idx = scores_idx.reshape(-1)
     selected_video_features = video_features[torch.arange(num_frames), scores_idx]
+    selected_video_features = frequency_adaptive_enhancement(
+        selected_video_features,
+        hyperparams.get('freq_filter', None)
+    )
     
     ### TAP ###
     # Time Positional Encoding

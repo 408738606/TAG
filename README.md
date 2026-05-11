@@ -18,6 +18,44 @@ TAG achieves state-of-the-art performance on Charades-STA and ActivityNet Captio
   <img src="figures/pipeline.png" alt="Pipeline" width="80%">
 </div>
 
+## FreqProto-TAG Extensions
+
+This repository includes optional components for frequency-domain enhancement, LLM query debiasing, and prototype-guided explanations.
+
+### 1) Frequency-Domain Adaptive Enhancement
+Enable frequency filtering by setting `freq_filter.enabled = True` in `data_configs.py` and tuning the filter parameters per dataset.
+
+### 2) LLM Query Debias + Cross-Modal Verification
+Provide a JSON file mapping `video_id -> [visual description strings]` (e.g., keyframe captions). Then run:
+```bash
+python evaluate.py --dataset charades --debias_queries --visual_desc path/to/visual_desc.json
+```
+
+### 3) Unsupervised Event Prototype Library
+Prepare a segment description JSON in the following format:
+```json
+{
+  "video_id": [
+    {"start": 12.4, "end": 18.7, "description": "A person sits on a sofa and reads a book"}
+  ]
+}
+```
+Build the prototype library:
+```bash
+python prototype_library.py \
+  --segment_desc path/to/segment_desc.json \
+  --output_lib outputs/prototypes.npz \
+  --output_map outputs/segment_proto_map.json \
+  --num_clusters 50
+```
+Use prototype-guided scoring and save explanations:
+```bash
+python evaluate.py --dataset charades \
+  --prototype_lib outputs/prototypes.npz \
+  --segment_proto_map outputs/segment_proto_map.json \
+  --save_predictions outputs/predictions.json
+```
+
 
 ## Quick Start
 

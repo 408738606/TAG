@@ -1,4 +1,7 @@
 import numpy as np
+import torch
+import torch.nn.functional as F
+from vlm_localizer import encode_texts
 
 def calc_iou(candidates, gt):
     start, end = candidates[:,0], candidates[:,1]
@@ -52,3 +55,25 @@ def filter_and_integrate(sub_query_proposals, relation):
     proposals = select_proposal(np.array(searched_proposals))
 
     return proposals.tolist()[:2]
+
+
+def select_debiased_query(candidates, visual_descriptions=None, min_similarity=0.2, device='cuda'):
+    if not candidates:
+        return None, {'reason': 'no_candidates'}
+    if not visual_descriptions:
+        return candidates[0], {'reason': 'no_visual_descriptions'}
+
+    with torch.no_grad():
+        cand_emb = encode_texts(candidates, device=device)
+        desc_emb = encode_texts(visual_descriptions, device=device)
+        cand_emb = F.normalize(cand_emb, dim=-1)
+        desc_emb = F.normalize(desc_emb, dim=-1)
+        scores = cand_emb @ desc_emb.t()
+        scores = scores.mean(dim=1)
+
+    best_idx = torch.argmax(scores).item()
+    best_score = scores[best_idx].item()
+    if best_score < min_similarity:
+        return candidates[0], {'reason': 'low_similarity', 'best_score': best_score}
+
+    return candidates[best_idx], {'reason': 'selected', 'best_score': best_score}

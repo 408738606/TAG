@@ -1,3 +1,15 @@
+FREQ_FILTER_DEFAULT = {
+    'enabled': False,
+    'mid_freq': 0.35,
+    'bandwidth': 0.2,
+    'high_boost': 0.6,
+    'low_cut': 0.05,
+    'low_damp': 0.0,
+    'noise_cut': 0.85,
+    'noise_damp': 0.2,
+    'min_weight': 0.2,
+}
+
 DATASETS={
     'charades': {
         'feature_path': './datasets/Charades/',
@@ -11,6 +23,7 @@ DATASETS={
             "window_radius": 7,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "freq_filter": FREQ_FILTER_DEFAULT,
         },
         'splits': {
             'default': {
@@ -50,6 +63,7 @@ DATASETS={
             "kmeans_k": 9,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "freq_filter": FREQ_FILTER_DEFAULT,
         },
         'splits': {
             'default': {
@@ -89,6 +103,7 @@ DATASETS={
             "kmeans_k": 9,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "freq_filter": FREQ_FILTER_DEFAULT,
         },
         'splits': {
             'default': {
@@ -128,6 +143,7 @@ DATASETS={
             "kmeans_k": 9,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "freq_filter": FREQ_FILTER_DEFAULT,
         },
         'splits': {
             'default': {
@@ -168,6 +184,7 @@ DATASETS={
             "window_radius": 7,
             "prior": 1,
             "temporal_window_size": 21,
+            "freq_filter": FREQ_FILTER_DEFAULT,
         },
         'splits': {
             'default': {
@@ -195,6 +212,7 @@ DATASETS={
             "kmeans_k": 25,
             "prior": 1,
             "temporal_window_size": 25,
+            "freq_filter": FREQ_FILTER_DEFAULT,
         },
         'splits': {
             'default': {
