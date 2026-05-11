@@ -145,7 +145,9 @@ def load_prototype_library(path: str, max_features: int = 5000) -> Optional[Prot
 
 
 def score_query_to_prototypes(query: str, library: PrototypeLibrary) -> Tuple[Optional[str], float]:
-    if library is None or not library.prototype_descriptions:
+    if library is None:
+        return None, 0.0
+    if not library.prototype_descriptions:
         return None, 0.0
     from sklearn.metrics.pairwise import cosine_similarity
 
@@ -156,7 +158,9 @@ def score_query_to_prototypes(query: str, library: PrototypeLibrary) -> Tuple[Op
 
 
 def score_query_to_texts(query: str, texts: List[str], library: PrototypeLibrary) -> np.ndarray:
-    if library is None or not texts:
+    if library is None:
+        return np.zeros(len(texts))
+    if not texts:
         return np.zeros(len(texts))
     from sklearn.metrics.pairwise import cosine_similarity
 

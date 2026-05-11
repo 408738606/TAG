@@ -193,7 +193,7 @@ def temporal_aware_feature_smoothing(kernel_size, features):
 
 def frequency_adaptive_temporal_enhancement(features, config):
     cfg = {**DEFAULT_FREQ_ENHANCE, **(config or {})}
-    if not cfg.get("enabled", False):
+    if not cfg.get("enabled", True):
         return features
 
     original_dtype = features.dtype

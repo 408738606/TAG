@@ -231,7 +231,7 @@ if __name__=='__main__':
     proto_override = hyperparams.get("prototype") or {}
     proto_cfg = merge_config(DEFAULT_PROTOTYPE_CONFIG, proto_override)
     if segment_desc_map and "enabled" not in proto_override:
-        # Auto-enable prototype guidance when segment descriptions are provided.
+        # Auto-enable prototype guidance when segment descriptions are provided and not explicitly disabled.
         proto_cfg["enabled"] = True
 
     prototype_context = None
