@@ -51,15 +51,6 @@ def calc_iou(candidates, gt):
     union = np.maximum(end, e) - np.minimum(start, s)
     return inter.clip(min=0) / union
 
-def eval_without_llm(data, feature_path, stride, hyperparams, tckmeans, **kwargs):
-    return eval(data, feature_path, stride, hyperparams, use_llm=False, tckmeans=tckmeans, **kwargs)
-
-
-def eval_with_llm(data, feature_path, stride, hyperparams, tckmeans, **kwargs):
-    return eval(data, feature_path, stride, hyperparams, use_llm=True, tckmeans=tckmeans, **kwargs)
-
-
-
 def eval(
     data,
     feature_path,
@@ -173,7 +164,9 @@ def normalize_description_list(value):
     if value is None:
         return []
     if isinstance(value, dict):
-        value = value.get("descriptions") or value.get("frames") or []
+        value = value.get("descriptions") or value.get("frames")
+        if value is None:
+            return []
     if not isinstance(value, list):
         return []
     descriptions = []
@@ -227,8 +220,9 @@ if __name__=='__main__':
 
     hyperparams = dataset["hyper_parameters"]
     debias_cfg = merge_config(DEFAULT_DEBIAS_CONFIG, hyperparams.get("debias"))
-    proto_cfg = merge_config(DEFAULT_PROTOTYPE_CONFIG, hyperparams.get("prototype"))
-    if segment_desc_map:
+    proto_override = hyperparams.get("prototype") or {}
+    proto_cfg = merge_config(DEFAULT_PROTOTYPE_CONFIG, proto_override)
+    if segment_desc_map and "enabled" not in proto_override:
         proto_cfg["enabled"] = True
 
     prototype_context = None

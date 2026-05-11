@@ -148,9 +148,7 @@ def get_debiased_queries(
         seen.add(cleaned)
         unique_variants.append(cleaned)
 
-    unique_variants = unique_variants[:max_variants]
-
     if frame_descriptions:
-        return filter_queries_by_frame_similarity(unique_variants, frame_descriptions, min_similarity)
+        unique_variants = filter_queries_by_frame_similarity(unique_variants, frame_descriptions, min_similarity)
 
-    return unique_variants
+    return unique_variants[:max_variants]

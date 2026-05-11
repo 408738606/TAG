@@ -28,6 +28,7 @@ DEFAULT_FREQ_ENHANCE = {
 }
 
 DEFAULT_PROTO_CONFIG = {
+    "enabled": True,
     "weight": 0.2,
 }
 
@@ -506,21 +507,22 @@ def localize(
             scores = scores[0]
             if prototype_context and segment_descriptions:
                 proto_config = {**DEFAULT_PROTO_CONFIG, **hyperparams.get("prototype", {})}
-                proposal_items = [
-                    [float(static_pred[i][0]), float(static_pred[i][1]), float(scores[i])]
-                    for i in range(len(scores))
-                ]
-                reranked, prototype_evidence = rerank_proposals_with_prototypes(
-                    proposal_items,
-                    query["descriptions"],
-                    segment_descriptions,
-                    prototype_context,
-                    weight=proto_config["weight"],
-                )
-                if reranked:
-                    scores = torch.tensor([item[2] for item in reranked], device=scores.device)
-                if prototype_evidence:
-                    query["prototype"] = prototype_evidence
+                if proto_config.get("enabled", True):
+                    proposal_items = [
+                        [float(static_pred[i][0]), float(static_pred[i][1]), float(scores[i])]
+                        for i in range(len(scores))
+                    ]
+                    reranked, prototype_evidence = rerank_proposals_with_prototypes(
+                        proposal_items,
+                        query["descriptions"],
+                        segment_descriptions,
+                        prototype_context,
+                        weight=proto_config["weight"],
+                    )
+                    if reranked:
+                        scores = torch.tensor([item[2] for item in reranked], device=scores.device)
+                    if prototype_evidence:
+                        query["prototype"] = prototype_evidence
             scores = scores / scores.max()
 
         query['response'] = []
