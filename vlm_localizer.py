@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from lavis.models import load_model_and_preprocess
 from torchvision import transforms
 
-MIN_BANDWIDTH = 1e-6
-MIN_FFT_LENGTH = 4
+FREQ_FILTER_MIN_BANDWIDTH = 1e-6  # Prevent division by zero in Gaussian kernel.
+FREQ_FILTER_MIN_FFT_LENGTH = 4
 
 #### BLIP-2 Q-Former ####
 model, vis_processors, text_processors = load_model_and_preprocess("blip2_image_text_matching", "coco", device='cuda',
@@ -186,7 +186,7 @@ def build_frequency_weights(length, config, device):
     if not config or not config.get('enabled', False):
         return None
     mid = config.get('mid_freq', 0.35)
-    bandwidth = max(config.get('bandwidth', 0.2), MIN_BANDWIDTH)
+    bandwidth = max(config.get('bandwidth', 0.2), FREQ_FILTER_MIN_BANDWIDTH)
     high_boost = max(config.get('high_boost', 0.5), 0.0)
     low_cut = config.get('low_cut', 0.05)
     low_damp = max(config.get('low_damp', 0.0), 0.0)
@@ -210,7 +210,7 @@ def frequency_adaptive_enhancement(features, config):
     """Apply FFT-based frequency filtering to enhance temporal features."""
     if not config or not config.get('enabled', False):
         return features
-    if features.size(0) < MIN_FFT_LENGTH:
+    if features.size(0) < FREQ_FILTER_MIN_FFT_LENGTH:
         return features
     dtype = features.dtype
     signal = torch.fft.rfft(features.float(), dim=0)

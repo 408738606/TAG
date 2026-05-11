@@ -9,6 +9,11 @@ import os
 from llm_prompting import select_proposal, select_debiased_query
 from prototype_utils import apply_prototype_guidance, load_prototype_library, load_segment_prototypes
 
+FALLBACK_PROPOSAL = np.array([[0.0, 0.0, 0.0]])
+PROPOSAL_START_IDX = 0
+PROPOSAL_END_IDX = 1
+PROPOSAL_SCORE_IDX = 2
+
 def get_args():
     parser = argparse.ArgumentParser(description='Evaluation for training-free video temporal grounding.')
     parser.add_argument('--dataset', default='charades', type=str, help='Specify the dataset. See supported datasets in data_configs.py.')
@@ -127,14 +132,16 @@ def eval(
                 )
 
             if len(proposals) == 0:
-                proposals = np.array([[0.0, 0.0, 0.0]])
+                proposals = FALLBACK_PROPOSAL.copy()
             else:
                 proposals = select_proposal(np.array(proposals))
 
             s, e = ann['timestamps'][i]
             s, e = s + pad_sec, e + pad_sec
 
-            sp, ep, score = proposals[0][0], proposals[0][1], proposals[0][2]
+            sp = proposals[0][PROPOSAL_START_IDX]
+            ep = proposals[0][PROPOSAL_END_IDX]
+            score = proposals[0][PROPOSAL_SCORE_IDX]
 
             iou_ = (min(e, ep) - max(s, sp)) / (max(e, ep) - min(s, sp))
             ious.append(max(iou_, 0))

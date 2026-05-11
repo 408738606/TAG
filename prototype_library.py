@@ -9,7 +9,7 @@ import torch
 
 from vlm_localizer import encode_texts
 
-DEFAULT_RANDOM_SEED = 60  # Match KMeans random_state used in TAG localizer.
+DEFAULT_RANDOM_SEED = 60  # Match torch.manual_seed(60) used in vlm_localizer KMeans.
 
 def load_segments(path: str) -> Tuple[List[str], List[dict], List[str]]:
     with open(path, 'r', encoding='utf-8') as f:
@@ -53,7 +53,8 @@ def build_prototypes(
     """Cluster segment descriptions with K-Means and return prototype centroids and texts."""
     cluster_count = min(num_clusters, len(descriptions))
     if cluster_count <= 0:
-        return np.empty((0, 0), dtype=np.float32), [], np.array([], dtype=np.int64)
+        embedding_dim = embeddings.shape[1] if embeddings.ndim == 2 else 0
+        return np.empty((0, embedding_dim), dtype=np.float32), [], np.array([], dtype=np.int64)
     kmeans = KMeans(n_clusters=cluster_count, random_state=seed, n_init=10)
     labels = kmeans.fit_predict(embeddings)
     centroids = kmeans.cluster_centers_

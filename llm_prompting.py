@@ -1,8 +1,12 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TypedDict
 from vlm_localizer import encode_texts
+
+class QuerySelectionMeta(TypedDict, total=False):
+    reason: str
+    best_score: float
 
 def calc_iou(candidates, gt):
     start, end = candidates[:,0], candidates[:,1]
@@ -64,6 +68,7 @@ def select_debiased_query(
     min_similarity: float = 0.2,
     device: str = 'cuda',
 ) -> Tuple[Optional[str], Dict[str, object]]:
+) -> Tuple[Optional[str], QuerySelectionMeta]:
     """Select the query candidate most similar to visual descriptions.
 
     Args:

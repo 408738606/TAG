@@ -21,6 +21,10 @@ class SegmentEntry(TypedDict, total=False):
     end: float
     description: str
     prototype_id: int
+
+
+class PrototypeExplanation(TypedDict, total=False):
+    prototype_id: int
     prototype_text: str
     prototype_score: float
     segment_start: float
@@ -85,7 +89,7 @@ def apply_prototype_guidance(
     video_id: str,
     weight: float = 0.2,
     device: str = 'cuda',
-) -> Tuple[List[List[float]], Optional[SegmentEntry]]:
+) -> Tuple[List[List[float]], Optional[PrototypeExplanation]]:
     if not proposals or not prototype_lib or video_id not in segment_map:
         return proposals, None
 
