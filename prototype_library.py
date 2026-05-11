@@ -47,7 +47,7 @@ def build_prototypes(embeddings: np.ndarray, descriptions: List[str], num_cluste
     cluster_count = min(num_clusters, len(descriptions))
     if cluster_count <= 0:
         return np.empty((0, 0), dtype=np.float32), [], np.array([], dtype=np.int64)
-    kmeans = KMeans(n_clusters=cluster_count, random_state=seed, n_init='auto')
+    kmeans = KMeans(n_clusters=cluster_count, random_state=seed, n_init=10)
     labels = kmeans.fit_predict(embeddings)
     centroids = kmeans.cluster_centers_
     prototype_texts = []
