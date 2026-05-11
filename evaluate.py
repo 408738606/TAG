@@ -37,7 +37,7 @@ def get_args():
     parser.add_argument('--use_debias', action='store_true', help='Enable query debiasing and cross-modal verification.')
     parser.add_argument('--tckmeans', action='store_true', help='Enable use GPU KMeans')
     parser.add_argument('--llm_output', default=None, type=str, help='LLM prompt output. If not specified, use nonly VLM for evaluation.')
-    parser.add_argument('--frame_desc', default=None, type=str, help='Keyframe description JSON for cross-modal verification.')
+    parser.add_argument('--frame_desc', default=None, type=str, help='Key frame description JSON for cross-modal verification.')
     parser.add_argument('--segment_desc', default=None, type=str, help='Segment description JSON for prototype guidance.')
     parser.add_argument('--prototype_cache', default=None, type=str, help='Cache path for prototype library descriptions.')
 
