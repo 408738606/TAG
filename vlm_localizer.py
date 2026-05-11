@@ -16,6 +16,7 @@ vis_processors = transforms.Compose([
 
 @torch.no_grad()
 def encode_texts(texts, device='cuda', max_length=35):
+    """Encode a list of text queries into BLIP-2 text embeddings."""
     if isinstance(texts, str):
         texts = [texts]
     text = model.tokenizer(texts, padding='max_length', truncation=True, max_length=max_length, return_tensors="pt").to(
@@ -169,6 +170,7 @@ def alignment_adjustment(data, scale_gamma, device, lambda_max=2, lambda_min=-2)
 
 
 def build_frequency_weights(length, config, device):
+    """Create a frequency response curve for adaptive temporal enhancement."""
     if not config or not config.get('enabled', False):
         return None
     mid = config.get('mid_freq', 0.35)
@@ -193,6 +195,7 @@ def build_frequency_weights(length, config, device):
 
 
 def frequency_adaptive_enhancement(features, config):
+    """Apply FFT-based frequency filtering to enhance temporal features."""
     if not config or not config.get('enabled', False):
         return features
     dtype = features.dtype

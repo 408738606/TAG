@@ -34,33 +34,6 @@ def calc_iou(candidates, gt):
     union = np.maximum(end, e) - np.minimum(start, s)
     return inter.clip(min=0) / union
 
-def eval_without_llm(data, feature_path, stride, hyperparams, tckmeans, **kwargs):
-    eval(
-        data,
-        feature_path,
-        stride,
-        hyperparams,
-        use_llm=False,
-        tckmeans=tckmeans,
-        pad_sec=0.0,
-        **kwargs,
-    )
-
-
-def eval_with_llm(data, feature_path, stride, hyperparams, tckmeans, **kwargs):
-    eval(
-        data,
-        feature_path,
-        stride,
-        hyperparams,
-        use_llm=True,
-        tckmeans=tckmeans,
-        pad_sec=0.0,
-        **kwargs,
-    )
-
-
-
 def eval(
     data,
     feature_path,
@@ -77,6 +50,7 @@ def eval(
     prototype_weight=0.2,
     save_predictions=None,
 ):
+    """Run evaluation with optional debiasing, prototype guidance, and prediction export."""
     ious = []
     thresh = np.array([0.3, 0.5, 0.7])
     recall = np.array([0, 0, 0])
@@ -198,24 +172,16 @@ if __name__=='__main__':
     if args.llm_output and os.path.exists(args.llm_output):
         with open(args.llm_output) as f:
             data = json.load(f)
-        if args.use_llm:
-            eval_with_llm(
-                data,
-                dataset['feature_path'],
-                dataset['stride'],
-                dataset['hyper_parameters'],
-                args.tckmeans,
-                **eval_kwargs,
-            )
-        else:
-            eval_without_llm(
-                data,
-                dataset['feature_path'],
-                dataset['stride'],
-                dataset['hyper_parameters'],
-                args.tckmeans,
-                **eval_kwargs,
-            )
+        eval(
+            data,
+            dataset['feature_path'],
+            dataset['stride'],
+            dataset['hyper_parameters'],
+            args.use_llm,
+            args.tckmeans,
+            pad_sec=0.0,
+            **eval_kwargs,
+        )
     else:
         with open(dataset['splits'][args.split]['annotation_file']) as f:
             data = json.load(f)

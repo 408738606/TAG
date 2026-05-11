@@ -58,6 +58,7 @@ def filter_and_integrate(sub_query_proposals, relation):
 
 
 def select_debiased_query(candidates, visual_descriptions=None, min_similarity=0.2, device='cuda'):
+    """Select the most faithful query rewrite using text-text similarity to visual descriptions."""
     if not candidates:
         return None, {'reason': 'no_candidates'}
     if not visual_descriptions:

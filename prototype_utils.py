@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, TypedDict
 
 import numpy as np
 import torch
@@ -9,7 +9,24 @@ import torch.nn.functional as F
 from vlm_localizer import encode_texts
 
 
-def load_prototype_library(path: str, device: str = 'cuda') -> Dict[str, object]:
+class PrototypeLibrary(TypedDict):
+    embeddings: torch.Tensor
+    texts: List[str]
+
+
+class SegmentEntry(TypedDict, total=False):
+    start: float
+    end: float
+    description: str
+    prototype_id: int
+    prototype_text: str
+    prototype_score: float
+    segment_start: float
+    segment_end: float
+    segment_text: str
+
+
+def load_prototype_library(path: str, device: str = 'cuda') -> PrototypeLibrary:
     if not path or not os.path.exists(path):
         raise FileNotFoundError(f'Prototype library not found: {path}')
     if path.endswith('.npz'):
@@ -26,7 +43,7 @@ def load_prototype_library(path: str, device: str = 'cuda') -> Dict[str, object]
     raise ValueError(f'Unsupported prototype library format: {path}')
 
 
-def load_segment_prototypes(path: str) -> Dict[str, List[Dict[str, object]]]:
+def load_segment_prototypes(path: str) -> Dict[str, List[SegmentEntry]]:
     if not path:
         return {}
     with open(path, 'r', encoding='utf-8') as f:
@@ -41,7 +58,7 @@ def _segment_iou(seg_a: Tuple[float, float], seg_b: Tuple[float, float]) -> floa
     return inter / union if union > 0 else 0.0
 
 
-def _assign_segment(proposal: Tuple[float, float], segments: List[Dict[str, object]]) -> Optional[Dict[str, object]]:
+def _assign_segment(proposal: Tuple[float, float], segments: List[SegmentEntry]) -> Optional[SegmentEntry]:
     if not segments:
         return None
     best_seg = None
@@ -59,12 +76,12 @@ def _assign_segment(proposal: Tuple[float, float], segments: List[Dict[str, obje
 def apply_prototype_guidance(
     proposals: List[List[float]],
     query: str,
-    prototype_lib: Dict[str, object],
-    segment_map: Dict[str, List[Dict[str, object]]],
+    prototype_lib: PrototypeLibrary,
+    segment_map: Dict[str, List[SegmentEntry]],
     video_id: str,
     weight: float = 0.2,
     device: str = 'cuda',
-) -> Tuple[List[List[float]], Optional[Dict[str, object]]]:
+) -> Tuple[List[List[float]], Optional[SegmentEntry]]:
     if not proposals or not prototype_lib or video_id not in segment_map:
         return proposals, None
 
