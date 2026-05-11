@@ -52,7 +52,7 @@ def load_segment_prototypes(path: str) -> Dict[str, List[SegmentEntry]]:
         return json.load(f)
 
 
-def _segment_iou(seg_a: Tuple[float, float], seg_b: Tuple[float, float]) -> float:
+def segment_iou(seg_a: Tuple[float, float], seg_b: Tuple[float, float]) -> float:
     start = max(seg_a[0], seg_b[0])
     end = min(seg_a[1], seg_b[1])
     inter = max(end - start, 0.0)
@@ -68,7 +68,7 @@ def _assign_segment(proposal: Tuple[float, float], segments: List[SegmentEntry])
     for seg in segments:
         seg_start = float(seg['start'])
         seg_end = float(seg['end'])
-        iou = _segment_iou((seg_start, seg_end), proposal)
+        iou = segment_iou((seg_start, seg_end), proposal)
         if iou > best_iou:
             best_iou = iou
             best_seg = seg
@@ -100,7 +100,7 @@ def apply_prototype_guidance(
 
     updated = []
     best_explanation = None
-    best_score = -1e9
+    best_score = float('-inf')
     segments = segment_map.get(video_id, [])
 
     for proposal in proposals:

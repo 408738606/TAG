@@ -6,6 +6,9 @@ import torch.nn.functional as F
 from lavis.models import load_model_and_preprocess
 from torchvision import transforms
 
+MIN_BANDWIDTH = 1e-6
+MIN_FFT_LENGTH = 4
+
 #### BLIP-2 Q-Former ####
 model, vis_processors, text_processors = load_model_and_preprocess("blip2_image_text_matching", "coco", device='cuda',
                                                                    is_eval=True)
@@ -16,7 +19,16 @@ vis_processors = transforms.Compose([
 
 @torch.no_grad()
 def encode_texts(texts, device='cuda', max_length=35):
-    """Encode a list of text queries into BLIP-2 text embeddings."""
+    """Encode text queries into BLIP-2 embeddings.
+
+    Args:
+        texts: A string or list of strings to encode.
+        device: Torch device to run the encoder on.
+        max_length: Max token length for BLIP-2 tokenizer.
+
+    Returns:
+        A tensor of shape (len(texts), hidden_dim) on the specified device.
+    """
     if isinstance(texts, str):
         texts = [texts]
     text = model.tokenizer(texts, padding='max_length', truncation=True, max_length=max_length, return_tensors="pt").to(
@@ -174,7 +186,7 @@ def build_frequency_weights(length, config, device):
     if not config or not config.get('enabled', False):
         return None
     mid = config.get('mid_freq', 0.35)
-    bandwidth = max(config.get('bandwidth', 0.2), 1e-6)
+    bandwidth = max(config.get('bandwidth', 0.2), MIN_BANDWIDTH)
     high_boost = max(config.get('high_boost', 0.5), 0.0)
     low_cut = config.get('low_cut', 0.05)
     low_damp = max(config.get('low_damp', 0.0), 0.0)
@@ -198,7 +210,7 @@ def frequency_adaptive_enhancement(features, config):
     """Apply FFT-based frequency filtering to enhance temporal features."""
     if not config or not config.get('enabled', False):
         return features
-    if features.size(0) < 4:
+    if features.size(0) < MIN_FFT_LENGTH:
         return features
     dtype = features.dtype
     signal = torch.fft.rfft(features.float(), dim=0)

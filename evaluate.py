@@ -52,7 +52,24 @@ def eval(
 ):
     """Run evaluation with optional debiasing, prototype guidance, and prediction export.
 
-    When debias_queries is True, only the selected_query is evaluated (no multi-variant expansion).
+    Args:
+        data: Annotation dict keyed by video id.
+        feature_path: Directory containing video feature .npy files.
+        stride: Temporal stride for proposal generation.
+        hyperparams: TAG hyper-parameter dict.
+        use_llm: Whether to expand proposals using LLM query candidates.
+        tckmeans: Whether to use temporal coherence KMeans.
+        pad_sec: Optional padding seconds for OOD evaluation.
+        debias_queries: If True, select a single debiased query for localization.
+        visual_descs: Dict mapping video_id to list of visual descriptions.
+        debias_min_sim: Similarity threshold for accepting a debiased query.
+        prototype_lib: PrototypeLibrary for prototype-guided scoring.
+        segment_map: Mapping of segments to prototype ids.
+        prototype_weight: Scaling factor for prototype guidance.
+        save_predictions: Optional output path for prediction JSON.
+
+    Notes:
+        When debias_queries is True, only the selected_query is evaluated (no multi-variant expansion).
     """
     ious = []
     thresh = np.array([0.3, 0.5, 0.7])
@@ -107,12 +124,15 @@ def eval(
                     weight=prototype_weight,
                 )
 
-            proposals = select_proposal(np.array(proposals))
+            if len(proposals) == 0:
+                proposals = np.array([[0.0, 0.0, 0.0]])
+            else:
+                proposals = select_proposal(np.array(proposals))
 
             s, e = ann['timestamps'][i]
             s, e = s + pad_sec, e + pad_sec
 
-            sp, ep = proposals[0][0],  proposals[0][1]
+            sp, ep, score = proposals[0][0], proposals[0][1], proposals[0][2]
 
             iou_ = (min(e, ep) - max(s, sp)) / (max(e, ep) - min(s, sp))
             ious.append(max(iou_, 0))
@@ -126,7 +146,7 @@ def eval(
                     'prediction': {
                         'start': float(sp),
                         'end': float(ep),
-                        'score': float(proposals[0][2]),
+                        'score': float(score),
                     },
                     'prototype': prototype_explanation,
                 })

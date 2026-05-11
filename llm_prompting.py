@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from typing import Dict, List, Optional, Tuple
 from vlm_localizer import encode_texts
 
 def calc_iou(candidates, gt):
@@ -57,8 +58,23 @@ def filter_and_integrate(sub_query_proposals, relation):
     return proposals.tolist()[:2]
 
 
-def select_debiased_query(candidates, visual_descriptions=None, min_similarity=0.2, device='cuda'):
-    """Select the most faithful query rewrite using text-text similarity to visual descriptions."""
+def select_debiased_query(
+    candidates: List[str],
+    visual_descriptions: Optional[List[str]] = None,
+    min_similarity: float = 0.2,
+    device: str = 'cuda',
+) -> Tuple[Optional[str], Dict[str, object]]:
+    """Select the most faithful query rewrite using similarity to visual descriptions.
+
+    Args:
+        candidates: Candidate query rewrites (first item should be the original query).
+        visual_descriptions: Keyframe/segment descriptions for cross-modal verification.
+        min_similarity: Minimum similarity threshold to accept a rewritten query.
+        device: Torch device for text encoding.
+
+    Returns:
+        (selected_query, metadata) where metadata includes the selection reason and score.
+    """
     if not candidates:
         return None, {'reason': 'no_candidates'}
     if not visual_descriptions:
