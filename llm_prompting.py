@@ -4,9 +4,9 @@ import torch.nn.functional as F
 from typing import Dict, List, Optional, Tuple, TypedDict
 from vlm_localizer import encode_texts
 
-class QuerySelectionMeta(TypedDict, total=False):
+class QuerySelectionMeta(TypedDict):
     reason: str
-    best_score: float
+    best_score: Optional[float]
 
 def calc_iou(candidates, gt):
     start, end = candidates[:,0], candidates[:,1]
@@ -67,7 +67,6 @@ def select_debiased_query(
     visual_descriptions: Optional[List[str]] = None,
     min_similarity: float = 0.2,
     device: str = 'cuda',
-) -> Tuple[Optional[str], Dict[str, object]]:
 ) -> Tuple[Optional[str], QuerySelectionMeta]:
     """Select the query candidate most similar to visual descriptions.
 
@@ -81,9 +80,9 @@ def select_debiased_query(
         (selected_query, metadata) where metadata includes the selection reason and score.
     """
     if not candidates:
-        return None, {'reason': 'no_candidates'}
+        return None, {'reason': 'no_candidates', 'best_score': None}
     if not visual_descriptions:
-        return candidates[0], {'reason': 'no_visual_descriptions'}
+        return candidates[0], {'reason': 'no_visual_descriptions', 'best_score': None}
 
     with torch.no_grad():
         cand_emb = encode_texts(candidates, device=device)

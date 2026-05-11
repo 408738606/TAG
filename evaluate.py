@@ -9,7 +9,7 @@ import os
 from llm_prompting import select_proposal, select_debiased_query
 from prototype_utils import apply_prototype_guidance, load_prototype_library, load_segment_prototypes
 
-FALLBACK_PROPOSAL = np.array([[0.0, 0.0, 0.0]])
+FALLBACK_PROPOSAL = np.array([[0.0, 0.0, 0.0]])  # Zero-length, zero-score fallback.
 PROPOSAL_START_IDX = 0
 PROPOSAL_END_IDX = 1
 PROPOSAL_SCORE_IDX = 2
@@ -132,7 +132,7 @@ def eval(
                 )
 
             if len(proposals) == 0:
-                proposals = FALLBACK_PROPOSAL.copy()
+                proposals = FALLBACK_PROPOSAL
             else:
                 proposals = select_proposal(np.array(proposals))
 
