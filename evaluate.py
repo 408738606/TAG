@@ -91,16 +91,13 @@ def eval(
                 response_entry = ann['response'][i]
 
             frame_descriptions = extract_frame_descriptions(ann, response_entry, frame_desc_map, vid)
-            if use_llm or debias_cfg["enabled"]:
-                queries = get_debiased_queries(
-                    ann['sentences'][i],
-                    response_entry=response_entry if use_llm else None,
-                    frame_descriptions=frame_descriptions,
-                    max_variants=debias_cfg["max_variants"],
-                    min_similarity=debias_cfg["min_similarity"],
-                )
-            else:
-                queries = [ann['sentences'][i]]
+            queries = build_query_variants(
+                ann['sentences'][i],
+                response_entry,
+                use_llm,
+                debias_cfg,
+                frame_descriptions,
+            )
 
             proposals = []
             for query_text in queries:
@@ -191,6 +188,18 @@ def extract_frame_descriptions(ann, response_entry, frame_desc_map, vid):
     if frame_desc_map and vid in frame_desc_map:
         return normalize_description_list(frame_desc_map[vid])
     return []
+
+
+def build_query_variants(sentence, response_entry, use_llm, debias_cfg, frame_descriptions):
+    if use_llm or debias_cfg["enabled"]:
+        return get_debiased_queries(
+            sentence,
+            response_entry=response_entry if use_llm else None,
+            frame_descriptions=frame_descriptions,
+            max_variants=debias_cfg["max_variants"],
+            min_similarity=debias_cfg["min_similarity"],
+        )
+    return [sentence]
 
 
 

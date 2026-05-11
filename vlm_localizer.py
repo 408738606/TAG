@@ -217,7 +217,8 @@ def frequency_adaptive_temporal_enhancement(features, config):
         weights = weights * adaptive
 
     weights = weights.clamp(min=cfg["min_gain"], max=cfg["max_gain"])
-    freq = freq * weights[:, None]
+    weights = weights.view(-1, *[1] * (freq.ndim - 1))
+    freq = freq * weights
     enhanced = torch.fft.irfft(freq, n=features.size(0), dim=0)
     return enhanced.to(original_dtype)
 

@@ -175,16 +175,26 @@ def rerank_proposals_with_prototypes(
     if not proposals or not segment_descriptions or library is None:
         return proposals, None
 
+    segment_bounds = []
+    for segment in segment_descriptions:
+        segment_bounds.append(
+            (
+                float(segment["start"]),
+                float(segment["end"]),
+                str(segment.get("description", "")),
+            )
+        )
+
     matched_descriptions: List[str] = []
     for proposal in proposals:
         start, end = proposal[0], proposal[1]
         best_desc = None
         best_iou = 0.0
-        for segment in segment_descriptions:
-            iou = _temporal_iou(start, end, float(segment["start"]), float(segment["end"]))
+        for seg_start, seg_end, seg_desc in segment_bounds:
+            iou = _temporal_iou(start, end, seg_start, seg_end)
             if iou > best_iou:
                 best_iou = iou
-                best_desc = segment.get("description")
+                best_desc = seg_desc
         matched_descriptions.append(best_desc if best_desc else "")
 
     sims = score_query_to_texts(query, matched_descriptions, library)

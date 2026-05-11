@@ -70,6 +70,9 @@ _DEFAULT_SYNONYMS: Dict[str, str] = {
     "automobile": "car",
 }
 
+SHORTEN_PREFIX_TOKENS = 3
+SHORTEN_SUFFIX_TOKENS = 2
+
 
 def normalize_query(query: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9\s]", " ", query)
@@ -94,8 +97,8 @@ def heuristic_debias_variants(
         if replaced_query and replaced_query not in variants and replaced_query != query:
             variants.append(replaced_query)
 
-    if len(tokens) > 5:
-        shortened = " ".join(tokens[:3] + tokens[-2:])
+    if len(tokens) > SHORTEN_PREFIX_TOKENS + SHORTEN_SUFFIX_TOKENS:
+        shortened = " ".join(tokens[:SHORTEN_PREFIX_TOKENS] + tokens[-SHORTEN_SUFFIX_TOKENS:])
         if shortened and shortened not in variants and shortened != query:
             variants.append(shortened)
 
@@ -132,6 +135,7 @@ def get_debiased_queries(
     min_similarity: float = 0.15,
     synonym_map: Optional[Dict[str, str]] = None,
 ) -> List[str]:
+    # min_similarity controls how strict the cross-modal consistency filter is.
     variants: List[str] = [query]
 
     if response_entry:
