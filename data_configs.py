@@ -11,6 +11,10 @@ DATASETS={
             "window_radius": 7,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "tau": 1.0,
+            "lam": 0.5,
+            "boundary_delta": 5,
+            "boundary_n_iter": 3,
         },
         'splits': {
             'default': {
@@ -50,6 +54,10 @@ DATASETS={
             "kmeans_k": 9,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "tau": 1.0,
+            "lam": 0.5,
+            "boundary_delta": 5,
+            "boundary_n_iter": 3,
         },
         'splits': {
             'default': {
@@ -89,6 +97,10 @@ DATASETS={
             "kmeans_k": 9,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "tau": 1.0,
+            "lam": 0.5,
+            "boundary_delta": 5,
+            "boundary_n_iter": 3,
         },
         'splits': {
             'default': {
@@ -128,6 +140,10 @@ DATASETS={
             "kmeans_k": 9,
             "prior": 0.5,
             "temporal_window_size": 21,
+            "tau": 1.0,
+            "lam": 0.5,
+            "boundary_delta": 5,
+            "boundary_n_iter": 3,
         },
         'splits': {
             'default': {
@@ -168,6 +184,10 @@ DATASETS={
             "window_radius": 7,
             "prior": 1,
             "temporal_window_size": 21,
+            "tau": 1.0,
+            "lam": 0.5,
+            "boundary_delta": 5,
+            "boundary_n_iter": 3,
         },
         'splits': {
             'default': {
@@ -195,6 +215,10 @@ DATASETS={
             "kmeans_k": 25,
             "prior": 1,
             "temporal_window_size": 25,
+            "tau": 1.0,
+            "lam": 0.5,
+            "boundary_delta": 5,
+            "boundary_n_iter": 3,
         },
         'splits': {
             'default': {

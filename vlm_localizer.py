@@ -88,6 +88,128 @@ def extract_static_score(start, end, cum_scores, num_frames, scores):
 
 
 
+def temporal_attention_score(start, end, a, c, tau=1.0, lam=0.5):
+    """
+    Compute temporal attention score for proposal [start, end).
+
+    Gap saliency g_i highlights action boundaries inside the segment,
+    suppressing merged adjacent actions. The score is:
+        inner = sum_i(w_i * a_i)  with softmax weights from (a_i + lam*g_i)
+        outer = mean of similarity scores outside the segment
+        S = inner - outer
+
+    Args:
+        start: start index of segment (inclusive)
+        end: end index of segment (exclusive)
+        a: 1-D similarity score tensor [N], already Box-Cox adjusted
+        c: aggregated feature tensor [N, D] (temporal-aware features)
+        tau: softmax temperature (sharpness of attention)
+        lam: weight of gap saliency relative to similarity
+
+    Returns:
+        score (float)
+    """
+    L = end - start
+    N = len(a)
+
+    if L <= 0:
+        return -float('inf')
+
+    a_seg = a[start:end].float()   # [L]
+    c_seg = c[start:end].float()   # [L, D]
+
+    # --- Gap saliency g_i ---
+    if L == 1:
+        g = torch.zeros(1, device=a.device)
+    else:
+        # L2 distances between consecutive frames: Δ_{s+1}, ..., Δ_{e-1}  (length L-1)
+        diffs = torch.norm(c_seg[1:] - c_seg[:-1], dim=-1)  # [L-1]
+
+        # Boundary padding: Δ_{e-1} <- Δ_{e-2} (replace last diff with second-to-last)
+        if L >= 3:
+            last_val = diffs[-2:-1]
+        else:
+            last_val = diffs[-1:]
+        diffs_padded = torch.cat([diffs[:-1], last_val])  # [L-1]
+
+        # Prepend Δ_s = Δ_{s+1} to get g for all L positions
+        g = torch.cat([diffs[0:1], diffs_padded])  # [L]
+
+        # Normalise to [0, 1]
+        g_min, g_max = g.min(), g.max()
+        g = (g - g_min) / (g_max - g_min + 1e-6)
+
+    # --- Attention weights ---
+    logits = tau * (a_seg + lam * g)
+    w = torch.softmax(logits, dim=0)  # [L]
+
+    # --- Inner score (attention-weighted) ---
+    inner = (w * a_seg).sum()
+
+    # --- Outer score (mean similarity outside segment) ---
+    outer_len = N - L
+    if outer_len > 0:
+        outer = (a[:start].float().sum() + a[end:].float().sum()) / outer_len
+    else:
+        outer = torch.tensor(0.0, device=a.device)
+
+    return (inner - outer).item()
+
+
+
+def boundary_refinement(best_start, best_end, a, c, num_frames, tau=1.0, lam=0.5, delta=5, n_iter=3):
+    """
+    Refine segment boundaries by iterative local search using temporal attention scoring.
+
+    Starting from the initial best proposal (best_start, best_end), the function
+    searches all combinations (s', e') within ±delta frames, selects the highest-
+    scoring one, then halves the radius and repeats up to n_iter times.
+
+    Args:
+        best_start, best_end: initial segment boundaries (masked-frame-space indices)
+        a: 1-D similarity score tensor [num_frames]
+        c: aggregated feature tensor [num_frames, D]
+        num_frames: total number of masked frames (upper bound for indices)
+        tau, lam: temporal attention parameters
+        delta: initial local search radius (frames)
+        n_iter: maximum number of refinement iterations
+
+    Returns:
+        (refined_start, refined_end)
+    """
+    current_start = best_start
+    current_end = best_end
+    current_score = temporal_attention_score(current_start, current_end, a, c, tau, lam)
+
+    for _ in range(n_iter):
+        best_s, best_e = current_start, current_end
+        best_score = current_score
+
+        s_lo = max(0, current_start - delta)
+        s_hi = min(num_frames, current_start + delta + 1)
+        e_lo = max(0, current_end - delta)
+        e_hi = min(num_frames + 1, current_end + delta + 1)
+
+        for s in range(s_lo, s_hi):
+            for e in range(e_lo, e_hi):
+                if e <= s:
+                    continue
+                score = temporal_attention_score(s, e, a, c, tau, lam)
+                if score > best_score:
+                    best_score = score
+                    best_s, best_e = s, e
+
+        if best_s == current_start and best_e == current_end:
+            break  # no improvement found
+
+        current_start, current_end = best_s, best_e
+        current_score = best_score
+        delta = max(1, delta // 2)  # shrink search radius each iteration
+
+    return current_start, current_end
+
+
+
 def scores_masking(scores, masks):
     # scores의 길이가 3 미만인 경우 initial_mask를 그대로 사용
     if scores.shape[1] < 3:
@@ -317,21 +439,35 @@ def segment_scenes_by_cluster(cluster_labels):
 
 
 
-def get_proposals_with_scores(scene_segments, cum_scores, frame_scores, num_frames, prior):
+def get_proposals_with_scores(scene_segments, a, c, num_frames, prior, tau=1.0, lam=0.5):
+    """
+    Generate proposals from scene segments and score them using temporal attention.
+
+    Args:
+        scene_segments: list of [start, end] pairs (masked-frame-space)
+        a: 1-D similarity score tensor [num_masked_frames]
+        c: aggregated feature tensor [num_masked_frames, D]
+        num_frames: actual total video frame count (used for prior length filtering)
+        prior: maximum allowed segment length as a fraction of num_frames
+        tau, lam: temporal attention scoring parameters
+
+    Returns:
+        proposals: list of [start, last] pairs (masked-frame-space)
+        proposals_scores: list of temporal attention scores
+    """
     proposals = []
-    proposals_static_scores = []
+    proposals_scores = []
     for i in range(len(scene_segments)):
         for j in range(i + 1, len(scene_segments)):
             start = scene_segments[i][0]
             last = scene_segments[j][0]
             if (last - start) > num_frames * prior:
                 continue
-            score_static = extract_static_score(start, last, cum_scores, len(cum_scores), frame_scores).item()
-            
+            score = temporal_attention_score(start, last, a, c, tau, lam)
             proposals.append([start, last])
-            proposals_static_scores.append(round(score_static, 4))
+            proposals_scores.append(round(score, 4))
 
-    return proposals, proposals_static_scores
+    return proposals, proposals_scores
 
 
 
@@ -383,30 +519,51 @@ def generate_proposal_revise(video_features, sentences, stride, hyperparams, tck
     # Kmeans clusetring 결과에 따라 비디오 장면 Segmentation
     scene_segments = segment_scenes_by_cluster(kmeans_labels)
 
-    # proposal generation by using scene segments integration
-    cum_scores = torch.cumsum(normalized_scores, dim=1)[0]
-    final_proposals, final_proposals_static_score = get_proposals_with_scores(scene_segments, cum_scores, normalized_scores, num_frames, hyperparams['prior'])
+    # Temporal attention scoring for all proposals (masked-frame-space)
+    a = normalized_scores[0].float()  # 1-D similarity scores [num_masked_frames]
+    num_masked = len(masked_indices)
+    tau = hyperparams.get('tau', 1.0)
+    lam = hyperparams.get('lam', 0.5)
 
+    final_proposals, final_proposals_score = get_proposals_with_scores(
+        scene_segments, a, temporal_aware_features, num_frames,
+        hyperparams['prior'], tau, lam
+    )
+
+    ### TCKMeans 1 Cluster 예외처리 ###
+    if len(final_proposals) == 0:
+        final_proposals.append([0, num_masked])
+        final_proposals_score.append(1)
+    ### TCKMeans 1 Cluster 예외처리 ###
+
+    final_proposals = torch.tensor(final_proposals)
+    final_proposals_score = torch.tensor(final_proposals_score)
+    _, index_static = final_proposals_score.sort(descending=True)
+    final_proposals = final_proposals[index_static]
+    final_proposals_scores = final_proposals_score[index_static]
+
+    # Boundary refinement: locally refine the top-ranked proposal (masked-frame-space)
+    delta = hyperparams.get('boundary_delta', 5)
+    n_iter = hyperparams.get('boundary_n_iter', 3)
+    best_start = int(final_proposals[0][0].item())
+    best_end = int(final_proposals[0][1].item())
+    refined_start, refined_end = boundary_refinement(
+        best_start, best_end, a, temporal_aware_features, num_masked,
+        tau, lam, delta, n_iter
+    )
+    final_proposals_list = final_proposals.tolist()
+    final_proposals_list[0] = [refined_start, refined_end]
+
+    # Map masked-frame-space indices back to actual frame indices
     final_proposals = [
         [
             masked_indices[start].item() if start < len(masked_indices) else num_frames,
             masked_indices[last].item() if last < len(masked_indices) else num_frames
         ]
-        for start, last in final_proposals
+        for start, last in final_proposals_list
     ]
 
-    ### TCKMeans 1 Cluster 예외처리 ###
-    if len(final_proposals) == 0:
-        final_proposals.append([0, num_frames])
-        final_proposals_static_score.append(1)
-    ### TCKMeans 1 Cluster 예외처리 ###
-
     final_proposals = torch.tensor(final_proposals)
-    final_proposals_static_score = torch.tensor(final_proposals_static_score)
-    _, index_static = final_proposals_static_score.sort(descending=True)
-    final_proposals = final_proposals[index_static]
-    final_proposals_scores = final_proposals_static_score[index_static] 
-
 
     #### dynamic scoring #####
     masked_scores = scores * initial_masks.float()
